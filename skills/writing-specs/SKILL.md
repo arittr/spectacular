@@ -17,12 +17,12 @@ A **specification** defines WHAT to build and WHY. It is NOT an implementation p
 ## When to Use
 
 Use this skill when:
-- Creating `specs/{feature-name}/spec.md` after brainstorming
-- Called from `/spec` slash command (after brainstorming phases 1-3)
+- Creating `specs/{run-id}-{feature-slug}/spec.md` after brainstorming
+- Called from `/spectacular:spec` slash command (after brainstorming phases 1-3)
 - Need to document feature requirements and architecture
 
 Do NOT use for:
-- Implementation plans with task breakdown → Use `/plan` instead
+- Implementation plans with task breakdown → Use `/spectacular:plan` instead
 - API documentation → Goes in code comments or separate docs
 - Runbooks or operational guides → Different document type
 
@@ -258,20 +258,20 @@ Seeing any of these? Delete and reference instead:
 - Success metrics or adoption targets
 - Recreated architecture explanations
 - Test implementation code
-- Files in `specs/{feature}/notes/` directory
+- Files in `specs/{run-id}-{feature-slug}/notes/` directory
 - Spec > 300 lines (probably duplicating constitutions)
 
 **All of these mean: Too much implementation detail. Focus on WHAT not HOW.**
 
 ## Workflow Integration
 
-This skill is called from `/spec` command:
+This skill is called from `/spectacular:spec` command:
 
-1. **User runs**: `/spec {feature description}`
+1. **User runs**: `/spectacular:spec {feature description}`
 2. **Brainstorming**: Phases 1-3 run (understanding, exploration, design)
-3. **This skill**: Generate `specs/{feature-name}/spec.md`
+3. **This skill**: Generate `specs/{run-id}-{feature-slug}/spec.md`
 4. **User reviews**: Check spec for completeness
-5. **Next step**: `/plan @specs/{feature-name}/spec.md` for task decomposition
+5. **Next step**: `/spectacular:plan @specs/{run-id}-{feature-slug}/spec.md` for task decomposition
 
 ## Quality Checklist
 
@@ -282,9 +282,9 @@ Before finalizing spec:
 - [ ] Architecture section lists files (not code examples)
 - [ ] All constitution rules referenced (not recreated)
 - [ ] All external libraries linked to docs (not copied)
-- [ ] No implementation plan (saved for `/plan`)
+- [ ] No implementation plan (saved for `/spectacular:plan`)
 - [ ] No success metrics or timelines
-- [ ] Single file at `specs/{feature-name}/spec.md`
+- [ ] Single file at `specs/{run-id}-{feature-slug}/spec.md`
 - [ ] Spec < 300 lines (if longer, check for duplication)
 
 ## The Bottom Line

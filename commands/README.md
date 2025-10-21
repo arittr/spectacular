@@ -33,7 +33,7 @@ Spec-driven development workflow with automatic sequential/parallel orchestratio
 - Task tool to analyze codebase context
 - Outputs comprehensive spec with task breakdown
 
-**Output**: `specs/{runid}-{feature-slug}/spec.md`
+**Output**: `specs/{run-id}-{feature-slug}/spec.md`
 
 **Example**:
 

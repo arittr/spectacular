@@ -26,7 +26,7 @@ echo "RUN_ID: $RUN_ID"
 # Get spec directory (e.g., specs/bdc63b-wikipedia-import/)
 SPEC_DIR=$(dirname {spec-path})
 
-# Extract feature slug from directory name pattern: {runId}-{feature-slug}
+# Extract feature slug from directory name pattern: {run-id}-{feature-slug}
 FEATURE_SLUG=$(basename $SPEC_DIR | sed "s/^${RUN_ID}-//")
 echo "FEATURE_SLUG: $FEATURE_SLUG"
 ```
@@ -40,8 +40,8 @@ echo "Generated RUN_ID: $RUN_ID (spec missing runId)"
 ```
 
 **Spec Directory Pattern:**
-Specs follow the pattern: `specs/{runId}-{feature-slug}/spec.md`
-Plans are generated at: `specs/{runId}-{feature-slug}/plan.md`
+Specs follow the pattern: `specs/{run-id}-{feature-slug}/spec.md`
+Plans are generated at: `specs/{run-id}-{feature-slug}/plan.md`
 
 **Announce:** "Using RUN_ID: {run-id} for {feature-slug} implementation"
 
@@ -99,7 +99,7 @@ status: ready
 ---
 ```
 
-The runId and feature slug are extracted from the spec directory path: `specs/{runId}-{feature-slug}/`
+The runId and feature slug are extracted from the spec directory path: `specs/{run-id}-{feature-slug}/`
 
 ### Step 2: Review Plan Output
 

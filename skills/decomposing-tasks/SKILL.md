@@ -384,7 +384,7 @@ After generating plan:
 ```markdown
 ✅ Task Decomposition Complete
 
-**Plan Location**: specs/features/{feature-name}/plan.md
+**Plan Location**: specs/{run-id}-{feature-slug}/plan.md
 
 ## Breakdown
 - Phases: {count}
@@ -404,13 +404,13 @@ After generating plan:
 
 Review plan:
 ```bash
-cat specs/features/{feature-name}/plan.md
+cat specs/{run-id}-{feature-slug}/plan.md
 ````
 
 Execute plan:
 
 ```bash
-/execute @specs/features/{feature-name}/plan.md
+/spectacular:execute @specs/{run-id}-{feature-slug}/plan.md
 ```
 
 ```
@@ -486,7 +486,7 @@ Critical Issues Found:
 - Task 7: No acceptance criteria
 
 Fix these issues in the spec, then re-run:
-/plan @specs/features/{name}.md
+/spectacular:plan @specs/{run-id}-{feature-slug}/spec.md
 
 ```
 

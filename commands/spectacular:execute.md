@@ -17,7 +17,9 @@ Before starting, you MUST read these skills:
 
 User will provide: `/spectacular:execute {plan-path}`
 
-Example: `/spectacular:execute @specs/features/magic-link-auth/plan.md`
+Example: `/spectacular:execute @specs/a1b2c3-magic-link-auth/plan.md`
+
+Where `a1b2c3` is the runId and `magic-link-auth` is the feature slug.
 
 ## Workflow
 
