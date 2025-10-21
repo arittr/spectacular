@@ -392,6 +392,31 @@ your-project/
 
 Spectacular is designed to work with [superpowers](https://github.com/obra/superpowers). Consider contributing to both projects!
 
+### Version Management
+
+Version is managed via `package.json` and automatically synced to all plugin JSON files.
+
+**Release (bump version + push):**
+```bash
+pnpm release:patch    # 1.1.0 -> 1.1.1 + push
+pnpm release:minor    # 1.1.0 -> 1.2.0 + push
+pnpm release:major    # 1.1.0 -> 2.0.0 + push
+```
+
+**Just bump (no push):**
+```bash
+pnpm version patch    # 1.1.0 -> 1.1.1
+pnpm version minor    # 1.1.0 -> 1.2.0
+pnpm version major    # 1.1.0 -> 2.0.0
+```
+
+This automatically:
+1. Updates `package.json`
+2. Syncs to `.claude-plugin/plugin.json`
+3. Syncs to `.claude-plugin/marketplace.json`
+4. Creates git commit and tag
+5. Pushes to remote (if using `release:*` scripts)
+
 ## License
 
 MIT

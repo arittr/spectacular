@@ -1,0 +1,29 @@
+{
+  "name": "spectacular",
+  "version": "1.1.0",
+  "description": "Spectacular skills/commands library for spec-anchored development and parallel task execution",
+  "author": "Drew Ritter <drew@ritter.dev>",
+  "license": "MIT",
+  "homepage": "https://github.com/arittr/spectacular",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arittr/spectacular.git"
+  },
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "skills",
+    "tdd",
+    "debugging",
+    "collaboration",
+    "best-practices",
+    "workflows"
+  ],
+  "scripts": {
+    "version": "node scripts/sync-version.js && git add .claude-plugin/",
+    "release:patch": "pnpm version patch && git push && git push --tags",
+    "release:minor": "pnpm version minor && git push && git push --tags",
+    "release:major": "pnpm version major && git push && git push --tags"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

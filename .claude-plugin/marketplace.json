@@ -1,20 +1,20 @@
 {
-    "name": "spectacular",
-    "description": "Marketplace for Spectacular skills/commands library",
-    "owner": {
-      "name": "Drew Ritter",
-      "email": "drew@ritter.dev"
-    },
-    "plugins": [
-      {
-        "name": "spectacular",
-        "description": "Spectacular skills/commands library for spec-anchored development and parallel task execution",
-        "version": "1.1.0",
-        "source": "./",
-        "author": {
-          "name": "Drew Ritter",
-          "email": "drew@ritter.dev"
-        }
+  "name": "spectacular",
+  "description": "Marketplace for Spectacular skills/commands library",
+  "owner": {
+    "name": "Drew Ritter",
+    "email": "drew@ritter.dev"
+  },
+  "plugins": [
+    {
+      "name": "spectacular",
+      "description": "Spectacular skills/commands library for spec-anchored development and parallel task execution",
+      "version": "1.1.0",
+      "source": "./",
+      "author": {
+        "name": "Drew Ritter",
+        "email": "drew@ritter.dev"
       }
-    ]
-  }
+    }
+  ]
+}

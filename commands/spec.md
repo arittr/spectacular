@@ -41,21 +41,60 @@ echo "RUN_ID: $RUN_ID"
 
 ### Step 1: Brainstorm Requirements
 
-Use the `brainstorming` skill for Phases 1-3 ONLY:
-- Phase 1: Understanding - Clarify scope and boundaries
-- Phase 2: Exploration - Explore alternatives, identify architectural decisions
-- Phase 3: Design Presentation - Present design incrementally
+**Announce:** "I'm brainstorming the design using Phases 1-3 (Understanding, Exploration, Design Presentation)."
 
-**Constitution compliance during brainstorming:**
-- Architectural decisions must follow @docs/constitutions/current/architecture.md
-- Pattern choices must follow @docs/constitutions/current/patterns.md
-- Library selections must follow @docs/constitutions/current/tech-stack.md
+**Create TodoWrite checklist:**
 
-**IMPORTANT**: STOP after Phase 3 (Design Presentation). Do NOT continue to:
-- Phase 4: Worktree Setup
-- Phase 5: Planning Handoff
+```
+Brainstorming for Spec:
+- [ ] Phase 1: Understanding (purpose, constraints, criteria)
+- [ ] Phase 2: Exploration (2-3 approaches proposed)
+- [ ] Phase 3: Design Presentation (design validated)
+- [ ] Proceed to Step 2: Generate Specification
+```
 
-Return to this /spectacular:spec workflow after design is validated.
+#### Phase 1: Understanding
+
+**Goal:** Clarify scope, constraints, and success criteria.
+
+1. Check current project state in working directory
+2. Read @docs/constitutions/current/ to understand constraints:
+   - architecture.md - Layer boundaries
+   - patterns.md - Mandatory patterns
+   - tech-stack.md - Approved libraries
+   - schema-rules.md - Database rules
+3. Ask ONE question at a time to refine the idea
+4. Use AskUserQuestion tool for multiple choice options
+5. Gather: Purpose, constraints, success criteria
+
+**Constitution compliance:**
+- All architectural decisions must follow @docs/constitutions/current/architecture.md
+- All pattern choices must follow @docs/constitutions/current/patterns.md
+- All library selections must follow @docs/constitutions/current/tech-stack.md
+
+#### Phase 2: Exploration
+
+**Goal:** Propose and evaluate 2-3 architectural approaches.
+
+1. Propose 2-3 different approaches that follow constitutional constraints
+2. For each approach explain:
+   - Core architecture (layers, patterns)
+   - Trade-offs (complexity vs features)
+   - Constitution compliance (which patterns used)
+3. Use AskUserQuestion tool to present approaches as structured choices
+4. Ask partner which approach resonates
+
+#### Phase 3: Design Presentation
+
+**Goal:** Present detailed design incrementally and validate.
+
+1. Present design in 200-300 word sections
+2. Cover: Architecture, components, data flow, error handling, testing
+3. After each section ask: "Does this look right so far?" (open-ended)
+4. Use open-ended questions for freeform feedback
+5. Adjust design based on feedback
+
+**After Phase 3:** Mark TodoWrite complete and proceed immediately to Step 2.
 
 ### Step 2: Generate Specification
 
