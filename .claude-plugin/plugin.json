@@ -1,0 +1,13 @@
+{
+    "name": "spectacular",
+    "description": "Spectacular skills/commands library for spec-anchored development and parallel task execution",
+    "version": "1.0.0",
+    "author": {
+      "name": "Drew Ritter",
+      "email": "drew@ritter.dev"
+    },
+    "homepage": "https://github.com/arittr/spectacular",
+    "repository": "https://github.com/arittr/spectacular",
+    "license": "MIT",
+    "keywords": ["skills", "tdd", "debugging", "collaboration", "best-practices", "workflows"]
+  }
