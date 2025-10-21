@@ -1,6 +1,6 @@
 {
   "name": "spectacular",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Spectacular skills/commands library for spec-anchored development and parallel task execution",
   "author": "Drew Ritter <drew@ritter.dev>",
   "license": "MIT",
