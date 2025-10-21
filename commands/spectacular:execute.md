@@ -2,7 +2,7 @@
 description: Execute implementation plan with automatic sequential/parallel orchestration using git-spice and worktrees
 ---
 
-You are executing an implementation plan for BigNight.Party.
+You are executing an implementation plan.
 
 ## Required Skills
 
@@ -126,7 +126,7 @@ For phases where tasks must run in order:
    **Spawn subagent for task implementation** (use Task tool):
 
    ```
-   ROLE: You are implementing Task {task-id} for BigNight.Party.
+   ROLE: You are implementing Task {task-id}.
 
    TASK: {task-name}
    CURRENT BRANCH: {current-branch}
@@ -275,7 +275,7 @@ For phases where tasks are independent:
    For each task, spawn agent with this prompt:
 
    ```
-   ROLE: You are implementing Task {task-id} for BigNight.Party.
+   ROLE: You are implementing Task {task-id}.
 
    TASK: {task-name}
    WORKTREE: {worktree-path}

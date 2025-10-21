@@ -1,12 +1,15 @@
-# BigNight.Party Commands
+# Spectacular Commands
 
-Spec-driven development workflow with automatic sequential/parallel orchestration using superpowers skills and git-spice.
+Spec-anchored development workflow with automatic sequential/parallel orchestration using superpowers skills and git-spice.
 
 ## Workflow
 
-### Specify → Plan → Execute
+### Initialize → Specify → Plan → Execute
 
 ```bash
+# 0. First time? Initialize your environment
+/spectacular:init
+
 # 1. Generate comprehensive spec from requirements (generates runId: a1b2c3)
 /spectacular:spec "magic link authentication with Auth.js"
 
@@ -22,6 +25,39 @@ Spec-driven development workflow with automatic sequential/parallel orchestratio
 ---
 
 ## Commands
+
+### `/spectacular:init`
+
+**Purpose**: Initialize spectacular environment and validate dependencies.
+
+**Checks:**
+- Superpowers plugin installed
+- Git-spice installed and configured
+- Gitignore configured for .worktrees/
+- Git repository initialized
+- Project structure (specs/ directory)
+
+**Actions:**
+- Installs missing .gitignore entries
+- Creates specs/ directory if needed
+- Reports missing dependencies with install instructions
+
+**Example**:
+```bash
+/spectacular:init
+```
+
+**First-time setup:**
+```
+✅ Environment ready for spectacular workflows!
+
+Next steps:
+  1. Generate a spec: /spectacular:spec "your feature description"
+  2. Create a plan: /spectacular:plan @specs/{run-id}-{feature-slug}/spec.md
+  3. Execute: /spectacular:execute @specs/{run-id}-{feature-slug}/plan.md
+```
+
+---
 
 ### `/spectacular:spec {description}`
 
@@ -58,7 +94,7 @@ Spec-driven development workflow with automatic sequential/parallel orchestratio
 
 **Uses**:
 
-- `task-decomposition` skill (custom BigNight.Party skill)
+- `decomposing-tasks` skill (custom spectacular skill)
 - Analyzes file dependencies between tasks
 - Groups into sequential/parallel phases
 - Validates task quality (no XL, explicit files, criteria)
@@ -144,14 +180,6 @@ Phase 2 (parallel):
 - Biome linting
 - Tests pass
 - Frequent commits
-
-**Time Savings**:
-
-```
-Without parallelization: 10h (sequential)
-With parallelization: 6h (longest parallel phase)
-Savings: 4h (40% faster)
-```
 
 ---
 
@@ -252,6 +280,9 @@ These commands integrate the following superpowers skills:
 ### Example 1: Single Feature (Sequential)
 
 ```bash
+# Initialize (first time only)
+/spectacular:init
+
 # Generate spec
 /spectacular:spec "leaderboard with real-time updates via Socket.io"
 
@@ -267,7 +298,6 @@ These commands integrate the following superpowers skills:
 /spectacular:execute @specs/a1b2c3-leaderboard/plan.md
 
 # Result: Sequential execution, no parallelization
-# Time: 12h
 ```
 
 ### Example 2: Feature with Parallel Opportunities
@@ -288,10 +318,10 @@ These commands integrate the following superpowers skills:
 /spectacular:execute @specs/a1b2c3-auth/plan.md
 
 # Result:
-# - Phase 1: 4h (sequential)
-# - Phase 2: 2h (parallel, was 5h sequential - 3h saved!)
-# - Phase 3: 3h (sequential)
-# Total: 9h (vs 12h sequential = 25% faster)
+# - Phase 1: Sequential execution
+# - Phase 2: Parallel execution (significant time savings)
+# - Phase 3: Sequential execution
+# Overall: Faster than fully sequential execution
 ```
 
 ### Example 3: Large Feature Auto-Decomposed
@@ -309,8 +339,7 @@ These commands integrate the following superpowers skills:
 # - Phase 3 (sequential): 2 tasks - Admin actions
 # - Phase 4 (parallel): 3 tasks - UI components (independent pages)
 # - Phase 5 (sequential): 1 task - Integration + E2E tests
-#
-# Time: 15h parallel vs 24h sequential (9h = 38% saved)
+# Multiple parallel phases provide significant time savings
 
 # Execute automatically orchestrates all phases
 /spectacular:execute @specs/a1b2c3-admin-categories/plan.md
@@ -319,6 +348,32 @@ These commands integrate the following superpowers skills:
 ---
 
 ## Troubleshooting
+
+### "Superpowers plugin not installed"
+
+**Cause**: The superpowers plugin is required but not installed.
+
+**Fix**:
+```bash
+/plugin install superpowers@superpowers-marketplace
+```
+
+Then restart Claude Code and run `/spectacular:init` again.
+
+### "Git-spice not installed"
+
+**Cause**: Git-spice is required for stacked branch management.
+
+**Fix**:
+```bash
+# macOS
+brew install git-spice
+
+# Linux
+# See https://github.com/abhinav/git-spice for install instructions
+```
+
+Then run `/spectacular:init` again.
 
 ### "Plan validation failed"
 
@@ -368,7 +423,7 @@ These commands integrate the following superpowers skills:
 
 ## Design Philosophy
 
-**Spec-Driven Development**:
+**Spec-Anchored Development**:
 
 1. Comprehensive specs eliminate questions during implementation
 2. Mandatory patterns ensure consistency
@@ -392,7 +447,7 @@ These commands integrate the following superpowers skills:
 **Time Optimization**:
 
 1. Automatic parallelization where safe
-2. 20-40% time savings typical for large features
+2. Time savings scale with feature size and parallelization opportunities
 3. No coordination overhead (worktrees isolate)
 4. Transparent - see exactly what's parallel vs sequential
 
@@ -405,17 +460,10 @@ These commands integrate the following superpowers skills:
 - Manual dependency tracking
 - Conservative sequential execution
 - No automatic parallelization
-- Example: 20h for large feature
 
 **With this workflow**:
 
 - Automatic dependency analysis
 - Optimal parallel/sequential orchestration
 - Worktree isolation (no conflicts)
-- Example: 12h for same feature (40% faster)
-
-**Real savings**:
-
-- Small features (1-5 tasks): 0-10% savings (mostly sequential)
-- Medium features (6-15 tasks): 15-30% savings (some parallel phases)
-- Large features (15+ tasks): 30-50% savings (multiple parallel phases)
+- Time savings scale with feature complexity and number of independent tasks
