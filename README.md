@@ -70,7 +70,7 @@ Spectacular builds on these excellent projects:
 
 ```bash
 # Install superpowers plugin
-/plugin marketplace add obra/superpowers-marketplace
+/plugin marketplace add obra/superpowers
 /plugin install superpowers@superpowers-marketplace
 
 # Install git-spice
@@ -81,7 +81,7 @@ brew install git-spice  # macOS
 
 ```bash
 /plugin marketplace add arittr/spectacular
-/plugin install spectacular@arittr
+/plugin install spectacular@spectacular
 ```
 
 _Note: If spectacular is not yet in the marketplace, clone this repo to your local plugins directory._
