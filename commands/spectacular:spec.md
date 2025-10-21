@@ -2,7 +2,7 @@
 description: Generate a lean feature specification using brainstorming and the writing-specs skill
 ---
 
-You are creating a feature specification for BigNight.Party.
+You are creating a feature specification.
 
 ## Constitution Adherence
 

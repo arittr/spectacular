@@ -2,7 +2,7 @@
 description: Decompose feature spec into executable plan with automatic phase analysis and sequential/parallel strategy
 ---
 
-You are creating an execution plan from a feature specification for BigNight.Party.
+You are creating an execution plan from a feature specification.
 
 ## Input
 
