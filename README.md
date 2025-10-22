@@ -3,7 +3,7 @@
 Spec-anchored, stack-driven development workflows with automatic parallel task execution for Claude Code.
 
 >[!NOTE]
->This project is currently tightly coupled to a git-spice PR stacking workflow. Support for Graphite (and other engines) coming soon!
+>The `/spectacular:execute` workflow is tightly coupled to git-spice for PR stacking. Support for Graphite (and other engines) coming soon!
 
 ## What is Spectacular?
 
