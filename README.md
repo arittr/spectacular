@@ -1,6 +1,9 @@
 # Spectacular
 
-Spec-anchored development workflows with automatic parallel task execution for Claude Code.
+Spec-anchored, stack-driven development workflows with automatic parallel task execution for Claude Code.
+
+>[!NOTE]
+>This project is currently tightly coupled to a git-spice PR stacking workflow. Support for Graphite (and other engines) coming soon!
 
 ## What is Spectacular?
 
