@@ -7,8 +7,9 @@ You are executing an implementation plan.
 ## Required Skills
 
 Before starting, you MUST read these skills:
-- `using-git-spice` - For managing stacked branches (~/.claude/skills/using-git-spice/SKILL.md)
-- `using-git-worktrees` - For parallel task isolation (superpowers skill)
+- `managing-worktrees` - For worktree lifecycle management (spectacular skill)
+- `orchestrating-isolated-subagents` - For directory isolation patterns (spectacular skill)
+- `using-git-spice` - For managing stacked branches (spectacular skill)
 - `requesting-code-review` - For phase review gates (superpowers skill)
 - `verification-before-completion` - For final verification (superpowers skill)
 - `finishing-a-development-branch` - For completion workflow (superpowers skill)
@@ -44,6 +45,7 @@ echo "Generated RUN_ID: $RUN_ID (plan missing runId)"
 - Branch naming: `{run-id}-task-X-Y-name`
 - Filtering: `git branch | grep ^{run-id}-`
 - Cleanup: Identify which branches belong to this run
+- Worktree naming: `.worktrees/{run-id}-main` and `.worktrees/{run-id}-task-{phase}-{task}`
 
 **Announce:** "Executing with RUN_ID: {run-id}"
 
@@ -93,7 +95,81 @@ git branch | grep "^  {run-id}-task-"
 - Parallel phases: Resume incomplete tasks only
 
 **If no existing work:**
-- Continue to Step 1 (Read and Parse Plan)
+- Continue to Step 0c (Create Main Worktree)
+
+### Step 0c: Create Main Worktree
+
+**Announce:** "Using `managing-worktrees` skill to create isolated worktree for execution"
+
+**Delegate main worktree creation to setup subagent:**
+
+```
+ROLE: Setup main worktree for spectacular execution
+
+TASK: Create and validate main worktree for RUN_ID {run-id}
+
+CRITICAL - SKILL REFERENCE:
+Use the `managing-worktrees` skill Pattern 1 for all worktree operations.
+
+IMPLEMENTATION:
+
+1. Check if main worktree already exists:
+```bash
+git worktree list | grep "{run-id}-main"
+```
+
+2. If worktree exists, validate its state:
+```bash
+cd .worktrees/{run-id}-main
+git status
+# Check for dirty state, detached HEAD, uncommitted changes
+```
+
+**If clean:** Report worktree ready for resume
+**If dirty:** Error - cannot resume with dirty worktree (user must clean manually)
+
+3. If worktree does NOT exist, create it:
+```bash
+# Get current branch
+CURRENT_BRANCH=$(git branch --show-current)
+echo "Creating worktree from branch: $CURRENT_BRANCH"
+
+# Create main worktree for this run
+git worktree add .worktrees/{run-id}-main $CURRENT_BRANCH
+
+# Verify creation
+git worktree list | grep "{run-id}-main"
+ls -la .worktrees/{run-id}-main
+```
+
+4. Change into worktree and verify:
+```bash
+cd .worktrees/{run-id}-main
+pwd  # Should show .worktrees/{run-id}-main path
+git branch --show-current  # Should show base branch
+git status  # Should be clean
+```
+
+5. Report completion:
+   - Worktree path: `.worktrees/{run-id}-main`
+   - Base branch name
+   - Status: new or resumed
+   - Working directory is clean
+
+CRITICAL:
+- ✅ Use `managing-worktrees` skill Pattern 1
+- ✅ Validate clean state before resuming
+- ✅ Error on dirty state (don't auto-clean)
+- ✅ Verify worktree accessible after creation
+- ✅ Stay in worktree directory after setup
+```
+
+**Store worktree path for sequential task execution:**
+```javascript
+mainWorktreePath = '.worktrees/{run-id}-main'
+```
+
+**If setup fails:** Abort execution, report error to user
 
 ### Step 1: Read and Parse Plan
 
@@ -119,7 +195,9 @@ For each phase in the plan, execute based on strategy:
 
 For phases where tasks must run in order:
 
-**Execute tasks sequentially with stacked branches:**
+**Announce:** "Using `orchestrating-isolated-subagents` skill for sequential task execution"
+
+**Execute tasks sequentially with stacked branches in main worktree:**
 
 1. For each task in the phase:
 
@@ -129,39 +207,55 @@ For phases where tasks must run in order:
    ROLE: You are implementing Task {task-id}.
 
    TASK: {task-name}
+   WORKTREE_PATH: {mainWorktreePath}  # e.g., .worktrees/{run-id}-main
    CURRENT BRANCH: {current-branch}
+
+   CRITICAL - WORKTREE ISOLATION:
+   Use the `orchestrating-isolated-subagents` skill Pattern 2 for directory management.
+   You are working in an isolated worktree. The orchestrator stays in main repo.
 
    CRITICAL - CONTEXT MANAGEMENT:
    You are a subagent with isolated context. Complete this task independently.
 
    IMPLEMENTATION:
 
-   1. Verify you're on the correct branch:
+   1. Verify WORKTREE_PATH parameter received:
+   ```bash
+   echo "WORKTREE_PATH: {mainWorktreePath}"
+   ```
+
+   2. Change into worktree directory:
+   ```bash
+   cd {mainWorktreePath}
+   pwd  # Verify you're in worktree
+   ```
+
+   3. Verify you're on the correct branch:
    ```bash
    git branch --show-current  # Should be {current-branch}
    ```
 
-   2. Read task details from: /Users/drewritter/projects/bignight.party/{plan-path}
+   4. Read task details from: {plan-path}
       Find: "Task {task-id}: {task-name}"
 
-   3. Implement according to:
+   5. Implement according to:
       - Files specified in task
       - Acceptance criteria in task
       - Project constitution (see @docs/constitutions/current/)
 
-   4. Quality checks (MUST run all):
+   6. Quality checks (MUST run all):
    ```bash
    pnpm format
    pnpm lint
    ```
 
-   5. Stage changes:
+   7. Stage changes:
    ```bash
    git add --all
    git status  # Verify changes staged
    ```
 
-   6. Create branch and commit with gs branch create:
+   8. Create branch and commit with gs branch create:
    ```bash
    gs branch create {run-id}-task-{task-id}-{short-name} -m "[Task {task-id}] {task-name}
 
@@ -181,19 +275,23 @@ For phases where tasks must run in order:
    - Commit all staged changes
    - Stack the branch on current branch automatically
 
-   7. Report completion with:
+   9. Report completion with:
       - Summary of changes
       - Files modified
       - Test results
       - Branch name created
       - Commit hash
+      - Confirmation of working in correct worktree
       - Any issues encountered
 
    CRITICAL:
-   - ✅ Stay on current branch (will move to new branch after commit)
+   - ✅ Verify WORKTREE_PATH parameter first
+   - ✅ cd into worktree before any work
+   - ✅ Stay in worktree directory throughout
    - ✅ Run ALL quality checks
    - ✅ Stage changes with git add
    - ✅ Use gs branch create with -m flag to commit
+   - ✅ Use `orchestrating-isolated-subagents` skill Pattern 2
    - ✅ Follow mandatory patterns
    ```
 
@@ -215,13 +313,15 @@ For phases where tasks must run in order:
 
 For phases where tasks are independent:
 
-**Use git worktrees for true parallel isolation (per using-git-worktrees skill):**
+**Announce:** "Using `managing-worktrees` skill for parallel task isolation"
+
+**Use git worktrees for true parallel isolation:**
 
 1. **Verify independence** (from plan's dependency analysis):
    - Confirm no file overlaps between tasks
    - Check dependencies are satisfied
 
-2. **Delegate worktree creation to setup subagent**:
+2. **Delegate parallel worktree creation to setup subagent**:
 
    Spawn a setup subagent to create all worktrees for this phase:
 
@@ -230,41 +330,53 @@ For phases where tasks are independent:
 
    TASK: Create worktrees for {task-count} parallel tasks
 
+   CRITICAL - SKILL REFERENCE:
+   Use the `managing-worktrees` skill Pattern 2 for all parallel worktree operations.
+
    IMPLEMENTATION:
 
-   1. Get current branch:
+   1. Get current branch from main worktree:
    ```bash
+   cd .worktrees/{run-id}-main
    CURRENT_BRANCH=$(git branch --show-current)
    echo "Base branch: $CURRENT_BRANCH"
+   cd ../..  # Return to main repo
    ```
 
-   2. Create worktrees (one per parallel task):
+   2. Create parallel task worktrees (one per task):
    ```bash
    # Create .worktrees directory if needed
    mkdir -p .worktrees
 
-   # For each parallel task, create a worktree (namespaced by RUN_ID)
-   git worktree add --detach ./.worktrees/{run-id}-task-{task-id-1} $CURRENT_BRANCH
-   git worktree add --detach ./.worktrees/{run-id}-task-{task-id-2} $CURRENT_BRANCH
-   # ... etc for each parallel task
+   # For each parallel task, create isolated worktree (namespaced by RUN_ID)
+   git worktree add .worktrees/{run-id}-task-{phase}-{task-1} $CURRENT_BRANCH
+   git worktree add .worktrees/{run-id}-task-{phase}-{task-2} $CURRENT_BRANCH
+   # ... etc for each parallel task in this phase
    ```
 
    3. Verify worktrees created:
    ```bash
-   git worktree list
+   git worktree list | grep "{run-id}-task-{phase}"
    ```
 
    4. Report:
-   - List of worktrees created with their paths
+   - List of worktrees created with their absolute paths
    - Base branch name
    - Confirmation all worktrees are ready
+   - Number of worktrees created
+
+   CRITICAL:
+   - ✅ Use `managing-worktrees` skill Pattern 2
+   - ✅ Create worktrees from main worktree's current branch
+   - ✅ Name worktrees: `.worktrees/{run-id}-task-{phase}-{task}`
+   - ✅ Verify all worktrees accessible
    ```
 
    Store worktree info for later cleanup:
    ```javascript
-   taskWorktrees = {
-     '{run-id}-task-3-1': {path: './.worktrees/{run-id}-task-3-1', baseBranch: '{run-id}-task-2-3-...'},
-     '{run-id}-task-3-2': {path: './.worktrees/{run-id}-task-3-2', baseBranch: '{run-id}-task-2-3-...'}
+   parallelWorktrees = {
+     '{run-id}-task-{phase}-{task-1}': {path: '.worktrees/{run-id}-task-{phase}-{task-1}', baseBranch: '{current-branch}'},
+     '{run-id}-task-{phase}-{task-2}': {path: '.worktrees/{run-id}-task-{phase}-{task-2}', baseBranch: '{current-branch}'}
    }
    ```
 
@@ -272,27 +384,37 @@ For phases where tasks are independent:
 
 3. **Spawn parallel agents** (CRITICAL: Single message with multiple Task tools):
 
+   **Announce:** "Using `orchestrating-isolated-subagents` skill for parallel task dispatch"
+
    For each task, spawn agent with this prompt:
 
    ```
    ROLE: You are implementing Task {task-id}.
 
    TASK: {task-name}
-   WORKTREE: {worktree-path}
+   WORKTREE_PATH: {worktree-path}  # e.g., .worktrees/{run-id}-task-{phase}-{task}
    BASE BRANCH: {base-branch}
 
    CRITICAL - WORKTREE ISOLATION:
+   Use the `orchestrating-isolated-subagents` skill Pattern 2 for directory management.
    You are working in an isolated git worktree. This means:
    - You have your own working directory: {worktree-path}
    - Other parallel tasks cannot interfere with your files
-   - You must cd into your worktree before starting
-   - When done, report completion and do NOT clean up worktree
+   - You must verify WORKTREE_PATH and cd into worktree before starting
+   - When done, report completion and do NOT clean up worktree (orchestrator does this)
 
    SETUP:
+
+   1. Verify WORKTREE_PATH parameter received:
+   ```bash
+   echo "WORKTREE_PATH: {worktree-path}"
+   ```
+
+   2. Change into worktree directory:
    ```bash
    cd {worktree-path}
+   pwd  # Verify you're in worktree directory
    git branch --show-current  # Should be {base-branch}
-   pwd  # Confirm you're in worktree directory
    ```
 
    IMPLEMENTATION:
@@ -312,13 +434,13 @@ For phases where tasks are independent:
    pnpm test
    ```
 
-   5. Stage changes (but DO NOT commit):
+   4. Stage changes:
    ```bash
    git add --all
    git status  # Verify changes staged
    ```
 
-   6. Create branch and commit with gs branch create:
+   5. Create branch and commit with gs branch create:
    ```bash
    gs branch create {run-id}-task-{task-id}-{short-name} -m "[Task {task-id}] {task-name}
 
@@ -338,28 +460,31 @@ For phases where tasks are independent:
    - Commit all staged changes
    - Stack the branch on base branch automatically
 
-   7. Detach HEAD to release branch (critical for worktree cleanup):
+   6. Detach HEAD to release branch (critical for worktree cleanup):
    ```bash
    git switch --detach
    ```
 
    This makes the branch accessible in the parent repo after worktree removal.
 
-   8. Report completion with:
+   7. Report completion with:
       - Summary of changes
       - Files modified
       - Test results
       - Branch name created
       - Confirmation that HEAD is detached
+      - Confirmation working in correct worktree
 
    CRITICAL:
-   - ✅ cd into worktree first
-   - ✅ Stay in worktree directory
+   - ✅ Verify WORKTREE_PATH parameter first
+   - ✅ cd into worktree before any work
+   - ✅ Stay in worktree directory throughout
    - ✅ Implement ONLY this task
    - ✅ Run ALL quality checks
    - ✅ Stage changes with git add
    - ✅ Use gs branch create with -m flag
    - ✅ MUST detach HEAD after creating branch
+   - ✅ Use `orchestrating-isolated-subagents` skill Pattern 2
    - ❌ DO NOT clean up worktree (orchestrator does this)
    - ❌ DO NOT touch other task files
    ```
@@ -367,61 +492,98 @@ For phases where tasks are independent:
 4. **Wait for all parallel agents to complete**
    (Agents work independently, orchestrator collects results)
 
-5. **Delegate cleanup to cleanup subagent**:
+5. **Create TodoWrite checklist for parallel worktree cleanup**:
+
+   Before delegating cleanup, orchestrator creates TodoWrite todos:
+
+   ```javascript
+   TodoWrite({
+     todos: [
+       {content: "Verify all parallel task branches exist", status: "pending", activeForm: "Verifying all parallel task branches exist"},
+       {content: "Verify all worktrees have detached HEAD", status: "pending", activeForm: "Verifying all worktrees have detached HEAD"},
+       {content: "Remove parallel worktree: .worktrees/{run-id}-task-{phase}-{task-1}", status: "pending", activeForm: "Removing parallel worktree"},
+       {content: "Remove parallel worktree: .worktrees/{run-id}-task-{phase}-{task-2}", status: "pending", activeForm: "Removing parallel worktree"},
+       // ... one todo per worktree
+       {content: "Verify branches still accessible after cleanup", status: "pending", activeForm: "Verifying branches still accessible"},
+       {content: "Create linear stack from parallel branches", status: "pending", activeForm: "Creating linear stack from parallel branches"},
+       {content: "Run integration tests on stacked branches", status: "pending", activeForm: "Running integration tests on stacked branches"}
+     ]
+   })
+   ```
+
+6. **Delegate cleanup to cleanup subagent**:
+
+   **Announce:** "Using `managing-worktrees` skill Pattern 3 for parallel worktree cleanup and `orchestrating-isolated-subagents` skill Pattern 1 for main repo operations"
 
    After all parallel agents report completion, spawn a cleanup subagent:
 
    ```
    ROLE: Cleanup parallel worktrees and verify branches
 
-   TASK: Clean up worktrees for Phase {phase-id} and verify git-spice stack
+   TASK: Clean up worktrees for Phase {phase-id} and create linear stack
+
+   CRITICAL - ORCHESTRATOR PATTERN:
+   Use the `orchestrating-isolated-subagents` skill Pattern 1.
+   You are running in the MAIN REPO, not a worktree.
+   All git-spice stacking operations must run in main repo.
+
+   CRITICAL - SKILL REFERENCES:
+   - Use `managing-worktrees` skill Pattern 3 for worktree cleanup
+   - Follow TodoWrite checklist for multi-worktree cleanup
 
    WORKTREES TO CLEAN:
-   - ./.worktrees/{run-id}-task-{task-id-1} (branch: {run-id}-task-{task-id-1}-{short-name})
-   - ./.worktrees/{run-id}-task-{task-id-2} (branch: {run-id}-task-{task-id-2}-{short-name})
+   - .worktrees/{run-id}-task-{phase}-{task-1} (branch: {run-id}-task-{phase}-{task-1}-{short-name})
+   - .worktrees/{run-id}-task-{phase}-{task-2} (branch: {run-id}-task-{phase}-{task-2}-{short-name})
    # ... etc
 
    IMPLEMENTATION:
 
-   1. Verify all branches exist and are accessible:
+   1. Verify you're in main repo (NOT a worktree):
    ```bash
-   git branch -v | grep "{run-id}-task-{task-id-1}"
-   git branch -v | grep "{run-id}-task-{task-id-2}"
+   pwd  # Should be main repo path, NOT .worktrees/*
+   ```
+
+   2. Verify all branches exist and are accessible:
+   ```bash
+   git branch -v | grep "{run-id}-task-{phase}-{task-1}"
+   git branch -v | grep "{run-id}-task-{phase}-{task-2}"
    # Should see all task branches listed
    ```
 
-   2. Verify all worktrees have detached HEAD:
+   3. Verify all worktrees have detached HEAD:
    ```bash
-   git worktree list
-   # All worktrees should show (detached HEAD) not a branch name
+   git worktree list | grep "{run-id}-task-{phase}"
+   # All parallel worktrees should show (detached HEAD) not a branch name
    ```
 
-   3. Remove all worktrees:
+   4. Remove all parallel worktrees (use managing-worktrees Pattern 3):
    ```bash
-   git worktree remove ./.worktrees/{run-id}-task-{task-id-1}
-   git worktree remove ./.worktrees/{run-id}-task-{task-id-2}
-   # ... etc
+   git worktree remove .worktrees/{run-id}-task-{phase}-{task-1}
+   git worktree remove .worktrees/{run-id}-task-{phase}-{task-2}
+   # ... etc for each parallel worktree in this phase
    ```
 
-   4. Verify branches are still accessible after cleanup:
+   Update TodoWrite as each worktree is removed.
+
+   5. Verify branches are still accessible after cleanup:
    ```bash
-   git branch -v | grep "^  {run-id}-task-"
-   # Should still see all task branches for this run
+   git branch -v | grep "^  {run-id}-task-{phase}"
+   # Should still see all phase task branches
    ```
 
-   5. Create linear stack from parallel branches:
+   6. Create linear stack from parallel branches:
    ```bash
-   # Stack parallel branches linearly (task order: 2.1 -> 2.2 -> 2.3 etc)
+   # Stack parallel branches linearly (task number order: 2.1 -> 2.2 -> 2.3 etc)
    # First task stays on base, subsequent tasks stack on previous
-   git checkout {run-id}-task-{task-id-2}-{short-name}
-   gs upstack onto {run-id}-task-{task-id-1}-{short-name}
+   git checkout {run-id}-task-{phase}-{task-2}-{short-name}
+   gs upstack onto {run-id}-task-{phase}-{task-1}-{short-name}
 
    # For 3+ parallel tasks, continue stacking:
-   # git checkout {run-id}-task-{task-id-3}-{short-name}
-   # gs upstack onto {run-id}-task-{task-id-2}-{short-name}
+   # git checkout {run-id}-task-{phase}-{task-3}-{short-name}
+   # gs upstack onto {run-id}-task-{phase}-{task-2}-{short-name}
    ```
 
-   6. Verify git-spice stack structure:
+   7. Verify git-spice stack structure:
    ```bash
    gs log short
    ```
@@ -435,25 +597,39 @@ For phases where tasks are independent:
    main
    ```
 
-   7. Run integration tests:
+   8. Switch back to main worktree:
    ```bash
-   # Check out the top of the stack (last parallel task)
-   git checkout {run-id}-task-{task-id-2}-{short-name}
+   cd .worktrees/{run-id}-main
+   git checkout {run-id}-task-{phase}-{last-task}-{short-name}  # Top of stack
+   pwd  # Verify you're in main worktree
+   ```
 
-   # Run tests on the branch (includes all previous work)
+   9. Run integration tests from main worktree:
+   ```bash
+   # Tests run in main worktree with all changes from stacked branches
    pnpm test
    pnpm lint
    ```
 
-   8. Report:
+   10. Report:
    - Confirmation all worktrees cleaned up
    - List of branches created and verified
    - Linear stack structure (task number order)
    - Integration test results
+   - Current directory (should be main worktree)
    - Any issues encountered
+
+   CRITICAL:
+   - ✅ Run in MAIN REPO for git-spice operations
+   - ✅ Use `managing-worktrees` skill Pattern 3 for cleanup
+   - ✅ Use `orchestrating-isolated-subagents` skill Pattern 1
+   - ✅ Follow TodoWrite checklist throughout
+   - ✅ Preserve branches (only remove working directories)
+   - ✅ Switch to main worktree after stacking
+   - ✅ Verify integration tests pass
    ```
 
-6. **After cleanup and linear stacking, use `requesting-code-review` skill:**
+7. **After cleanup and linear stacking, use `requesting-code-review` skill:**
 
    Dispatch code-reviewer subagent to review the entire phase:
    - All task branches in this phase
@@ -462,9 +638,9 @@ For phases where tasks are independent:
    - Ensure no file conflicts
    - Review quality and consistency
 
-7. **Address review feedback if needed**
+8. **Address review feedback if needed**
 
-8. Phase is complete when code review passes, cleanup verified, and linear stack confirmed
+9. Phase is complete when code review passes, cleanup verified, and linear stack confirmed
 
 ### Step 3: Verify Completion
 
@@ -653,28 +829,109 @@ If worktree creation fails:
 ❌ Worktree Creation Failed
 
 **Error**: {error-message}
+**Worktree**: {worktree-path}
 
 Common causes:
 - Path already exists: `rm -rf {path}` and `git worktree prune`
-- Uncommitted changes on current branch: `git stash`
+- Uncommitted changes on base branch: `git stash` or commit first
 - Working directory not clean: Commit or stash changes first
+- Detached HEAD in main repo: `git checkout {branch-name}`
+
+Resolution:
+1. Check worktree status: `git worktree list`
+2. Clean stale worktrees: `git worktree prune`
+3. Remove specific worktree: `git worktree remove {path}` (if exists)
+4. Verify base branch clean: `git status`
+5. Re-run `/spectacular:execute` to resume
 
 After fixing, re-run `/spectacular:execute`
 ```
 
+### Subagent Directory Isolation Failure
+
+If subagent fails to work in correct worktree:
+
+```markdown
+❌ Subagent Directory Isolation Failed
+
+**Error**: Subagent working in wrong directory
+**Expected**: {worktree-path}
+**Actual**: {actual-path}
+
+This violates `orchestrating-isolated-subagents` skill Pattern 2.
+
+Common causes:
+- WORKTREE_PATH parameter not passed to subagent
+- Subagent didn't cd into worktree
+- Subagent cd command failed
+- Path doesn't exist
+
+Resolution:
+1. Verify worktree exists: `git worktree list | grep {run-id}`
+2. Verify path accessible: `ls -la {worktree-path}`
+3. Check subagent prompt includes WORKTREE_PATH parameter
+4. Ensure subagent verifies path before work
+5. Re-dispatch subagent with corrected prompt
+
+**Prevention**: Always use `orchestrating-isolated-subagents` skill patterns.
+```
+
+### Parallel Worktree Cleanup Failure
+
+If parallel worktree cleanup fails:
+
+```markdown
+❌ Parallel Worktree Cleanup Failed
+
+**Error**: {error-message}
+**Worktree**: {worktree-path}
+
+Common causes:
+- Worktree has uncommitted changes (dirty state)
+- HEAD not detached (branch still checked out)
+- Files locked by process
+- Permission issues
+
+Resolution:
+1. Check worktree state: `git worktree list`
+2. If dirty, manual cleanup required:
+   ```bash
+   cd {worktree-path}
+   git status
+   # Either commit or discard changes
+   git add --all && git commit -m "WIP: cleanup"
+   # OR
+   git reset --hard
+   ```
+3. Verify HEAD detached:
+   ```bash
+   cd {worktree-path}
+   git switch --detach
+   ```
+4. Retry cleanup: `git worktree remove {worktree-path}`
+5. If all else fails, force remove: `git worktree remove -f {worktree-path}`
+
+**Prevention**: Ensure parallel task subagents always detach HEAD after branch creation.
+```
+
 ## Important Notes
 
-- **Orchestrator delegates, never executes** - The orchestrator NEVER runs git commands directly. All git operations are delegated to subagents (setup, implementation, cleanup)
-- **Subagents own their git operations** - Implementation subagents create branches and commit their own work using `gs branch create -m`
-- **Skill-driven execution** - Uses using-git-spice, using-git-worktrees, and other superpowers skills
-- **Automatic orchestration** - Reads plan strategies, executes accordingly
-- **Git-spice stacking** - Sequential tasks stack linearly; parallel tasks branch from same base (per using-git-spice skill)
-- **No feature branch** - The stack of task branches IS the feature; never create empty branch upfront
-- **Worktree isolation** - Parallel tasks run in separate worktrees (per using-git-worktrees skill)
-- **Critical: HEAD detachment** - Parallel task subagents MUST detach HEAD after creating branches to make them accessible in parent repo
-- **Context management** - Each task runs in isolated subagent to avoid token bloat
-- **Constitution adherence** - All agents follow project constitution (@docs/constitutions/current/)
-- **Quality gates** - Tests and linting after every task, code review after every phase
-- **Continuous commits** - Small, focused commits with [Task X.Y] markers throughout
+- **Orchestrator stays in main repo** - Uses `orchestrating-isolated-subagents` skill Pattern 1. The orchestrator NEVER changes directory. All work happens in worktrees via subagents.
+- **Main worktree for sequential tasks** - Created in Step 0c using `managing-worktrees` skill Pattern 1. All sequential tasks execute in `.worktrees/{run-id}-main`.
+- **Isolated worktrees for parallel tasks** - Created per-task using `managing-worktrees` skill Pattern 2. Each parallel task gets `.worktrees/{run-id}-task-{phase}-{task}`.
+- **Subagents receive WORKTREE_PATH** - Uses `orchestrating-isolated-subagents` skill Pattern 2. All subagents verify parameter and cd into worktree before work.
+- **Orchestrator delegates, never executes** - The orchestrator NEVER runs git commands directly. All git operations are delegated to subagents (setup, implementation, cleanup).
+- **Subagents own their git operations** - Implementation subagents create branches and commit their own work using `gs branch create -m`.
+- **Skill-driven execution** - Uses `managing-worktrees`, `orchestrating-isolated-subagents`, `using-git-spice`, and superpowers skills throughout.
+- **Automatic orchestration** - Reads plan strategies, executes accordingly.
+- **Git-spice stacking** - Sequential tasks stack linearly; parallel tasks branch from same base then stack for review (per `using-git-spice` skill).
+- **No feature branch** - The stack of task branches IS the feature; never create empty branch upfront.
+- **Parallel worktree cleanup** - Uses `managing-worktrees` skill Pattern 3 with TodoWrite checklist. Cleanup subagent runs in main repo to stack branches.
+- **Main worktree preservation** - After execution, `.worktrees/{run-id}-main` is preserved for inspection and resume capability. User cleans with `/spectacular:cleanup {run-id}`.
+- **Critical: HEAD detachment** - Parallel task subagents MUST detach HEAD after creating branches to make them accessible in parent repo for stacking.
+- **Context management** - Each task runs in isolated subagent to avoid token bloat.
+- **Constitution adherence** - All agents follow project constitution (@docs/constitutions/current/).
+- **Quality gates** - Tests and linting after every task, code review after every phase.
+- **Continuous commits** - Small, focused commits with [Task X.Y] markers throughout.
 
 Now execute the plan from: {plan-path}
