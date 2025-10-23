@@ -115,74 +115,74 @@ version:
 	fi
 	@./scripts/update-version.sh $(VERSION)
 
-# Bump patch version (1.2.3 -> 1.2.4) and create stacked branch
+# Bump patch version (1.2.3 -> 1.2.4) and commit
 bump-patch:
 	@CURRENT=$$(jq -r '.version' .claude-plugin/plugin.json); \
 	NEW=$$(echo $$CURRENT | awk -F. '{$$NF = $$NF + 1;} 1' | sed 's/ /./g'); \
 	echo "Bumping version: $$CURRENT -> $$NEW"; \
 	./scripts/update-version.sh $$NEW && \
 	git add .claude-plugin/*.json && \
-	gs branch create "update-version-to-$$NEW" -m "Bump version to $$NEW" && \
+	git commit -m "Bump version to $$NEW" && \
 	git tag "v$$NEW" && \
-	echo "✓ Version bumped to $$NEW (branch created + tagged)"
+	echo "✓ Version bumped to $$NEW (committed + tagged)"
 
-# Bump minor version (1.2.3 -> 1.3.0) and create stacked branch
+# Bump minor version (1.2.3 -> 1.3.0) and commit
 bump-minor:
 	@CURRENT=$$(jq -r '.version' .claude-plugin/plugin.json); \
 	NEW=$$(echo $$CURRENT | awk -F. '{$$2 = $$2 + 1; $$3 = 0;} 1' | sed 's/ /./g'); \
 	echo "Bumping version: $$CURRENT -> $$NEW"; \
 	./scripts/update-version.sh $$NEW && \
 	git add .claude-plugin/*.json && \
-	gs branch create "update-version-to-$$NEW" -m "Bump version to $$NEW" && \
+	git commit -m "Bump version to $$NEW" && \
 	git tag "v$$NEW" && \
-	echo "✓ Version bumped to $$NEW (branch created + tagged)"
+	echo "✓ Version bumped to $$NEW (committed + tagged)"
 
-# Bump major version (1.2.3 -> 2.0.0) and create stacked branch
+# Bump major version (1.2.3 -> 2.0.0) and commit
 bump-major:
 	@CURRENT=$$(jq -r '.version' .claude-plugin/plugin.json); \
 	NEW=$$(echo $$CURRENT | awk -F. '{$$1 = $$1 + 1; $$2 = 0; $$3 = 0;} 1' | sed 's/ /./g'); \
 	echo "Bumping version: $$CURRENT -> $$NEW"; \
 	./scripts/update-version.sh $$NEW && \
 	git add .claude-plugin/*.json && \
-	gs branch create "update-version-to-$$NEW" -m "Bump version to $$NEW" && \
+	git commit -m "Bump version to $$NEW" && \
 	git tag "v$$NEW" && \
-	echo "✓ Version bumped to $$NEW (branch created + tagged)"
+	echo "✓ Version bumped to $$NEW (committed + tagged)"
 
-# Bump patch version, create branch, and push (1.2.3 -> 1.2.4)
+# Bump patch version and push (1.2.3 -> 1.2.4)
 release-patch:
 	@CURRENT=$$(jq -r '.version' .claude-plugin/plugin.json); \
 	NEW=$$(echo $$CURRENT | awk -F. '{$$NF = $$NF + 1;} 1' | sed 's/ /./g'); \
 	echo "Releasing version: $$CURRENT -> $$NEW"; \
 	./scripts/update-version.sh $$NEW && \
 	git add .claude-plugin/*.json && \
-	gs branch create "update-version-to-$$NEW" -m "Bump version to $$NEW" && \
+	git commit -m "Bump version to $$NEW" && \
 	git tag "v$$NEW" && \
 	git push && \
 	git push --tags && \
-	echo "✓ Version $$NEW released (branch created + tagged + pushed)"
+	echo "✓ Version $$NEW released (committed + tagged + pushed)"
 
-# Bump minor version, create branch, and push (1.2.3 -> 1.3.0)
+# Bump minor version and push (1.2.3 -> 1.3.0)
 release-minor:
 	@CURRENT=$$(jq -r '.version' .claude-plugin/plugin.json); \
 	NEW=$$(echo $$CURRENT | awk -F. '{$$2 = $$2 + 1; $$3 = 0;} 1' | sed 's/ /./g'); \
 	echo "Releasing version: $$CURRENT -> $$NEW"; \
 	./scripts/update-version.sh $$NEW && \
 	git add .claude-plugin/*.json && \
-	gs branch create "update-version-to-$$NEW" -m "Bump version to $$NEW" && \
+	git commit -m "Bump version to $$NEW" && \
 	git tag "v$$NEW" && \
 	git push && \
 	git push --tags && \
-	echo "✓ Version $$NEW released (branch created + tagged + pushed)"
+	echo "✓ Version $$NEW released (committed + tagged + pushed)"
 
-# Bump major version, create branch, and push (1.2.3 -> 2.0.0)
+# Bump major version and push (1.2.3 -> 2.0.0)
 release-major:
 	@CURRENT=$$(jq -r '.version' .claude-plugin/plugin.json); \
 	NEW=$$(echo $$CURRENT | awk -F. '{$$1 = $$1 + 1; $$2 = 0; $$3 = 0;} 1' | sed 's/ /./g'); \
 	echo "Releasing version: $$CURRENT -> $$NEW"; \
 	./scripts/update-version.sh $$NEW && \
 	git add .claude-plugin/*.json && \
-	gs branch create "update-version-to-$$NEW" -m "Bump version to $$NEW" && \
+	git commit -m "Bump version to $$NEW" && \
 	git tag "v$$NEW" && \
 	git push && \
 	git push --tags && \
-	echo "✓ Version $$NEW released (branch created + tagged + pushed)"
+	echo "✓ Version $$NEW released (committed + tagged + pushed)"
