@@ -195,3 +195,142 @@ If you need to abort a restack, check `gs --help` for recovery options.
 - Command-specific help: `gs <command> --help`
 - Configuration: `gs config --help`
 - Official docs: https://abhinav.github.io/git-spice/
+
+## Concurrent Run Safety
+
+When running multiple spectacular executions simultaneously (different runIds), git-spice operations have different safety levels. Understanding which operations are safe during parallel runs prevents conflicts and data corruption.
+
+### Safe Operations
+
+These operations are safe during parallel spectacular runs because they operate on the current worktree's branch or branch-specific stack:
+
+**`gs branch create <name>`**
+- Safe: Creates branch in current worktree
+- Each worktree has independent HEAD
+- Branches created in worktrees are visible in all worktrees (shared `.git` database)
+- **Critical**: After creating a branch in a parallel task worktree, MUST run `git switch --detach` to make the branch accessible from parent repo
+  - Without detach: Branch creation succeeds, but branch remains checked out in worktree
+  - Parent repo cannot switch to the branch (worktree lock)
+  - Cleanup subagent cannot access the branch for stacking
+  - **Pattern**: `gs branch create {name} && git switch --detach`
+
+**`gs upstack onto <base>`**
+- Safe: Operates only on current branch and its upstack
+- Does not affect branches in other stacks
+- Each worktree can independently move its stack
+
+**`gs stack submit`**
+- Safe: Submits current branch's entire stack
+- Only pushes/updates PRs for branches in current stack
+- Multiple runs can submit different stacks simultaneously
+
+**`gs branch checkout <name>`**
+- Safe within worktree: Switches current worktree's HEAD
+- Does not affect other worktrees
+- Note: Cannot checkout branches currently checked out in another worktree (git protection)
+
+### Unsafe Operations Requiring Coordination
+
+These operations affect the entire repository and should only be run when no spectacular runs are active:
+
+**`gs repo restack`**
+- Unsafe: Rebases ALL tracked branches in repository
+- Affects branches across all concurrent runs
+- Can cause conflicts if runs are simultaneously modifying stacks
+- **Recommendation**: Only run in main repo when `.worktrees/` is empty (no active runs)
+
+**`gs repo sync`**
+- Unsafe: Pulls latest changes and deletes merged branches across entire repo
+- Can delete branches that concurrent runs are using
+- Can modify trunk that runs are based on
+- **Recommendation**: Only run between spectacular executions, not during
+
+### Worktree-Specific Patterns
+
+git-spice works with git worktrees with some important caveats:
+
+**Shared Git Database**
+- All worktrees share the same `.git` database
+- Branches created in any worktree are visible in all worktrees
+- Branch deletions in one worktree affect all worktrees
+- Tags and refs are shared across all worktrees
+
+**Independent HEAD per Worktree**
+- Each worktree has its own checked-out branch (HEAD)
+- `gs log short` shows different output depending on current worktree's branch
+- Stack operations (`gs upstack`, `gs downstack`, `gs stack`) are relative to current HEAD
+
+**Worktree Creation and Management**
+- Use the `managing-worktrees` skill for creating/removing worktrees
+- Pattern: Create worktree, create branch, detach HEAD, work, cleanup
+- See `managing-worktrees` skill for complete lifecycle
+
+**Parallel Task Pattern**
+```bash
+# In orchestrator (main repo)
+# 1. Create worktree using managing-worktrees skill
+git worktree add .worktrees/{runId}-task-{phase}-{task}
+
+# In subagent (inside worktree)
+cd .worktrees/{runId}-task-{phase}-{task}
+gs branch create {runId}-task-{phase}-{task}-{name}
+# ... make changes, commit ...
+git switch --detach  # CRITICAL: Makes branch accessible in parent repo
+# Subagent completes, exits worktree
+
+# In cleanup subagent (main repo, NOT worktree)
+# Now can access the branch for stacking
+git checkout {runId}-task-{phase}-{task}-{name}
+gs upstack onto {base-branch}
+```
+
+### Error Handling for Concurrent Conflicts
+
+**Branch Already Exists**
+```bash
+# Error: "branch '{name}' already exists"
+# Cause: Another run created the same branch name
+
+# Recovery:
+# 1. Check if branch belongs to your runId
+git branch --list "*{runId}*"
+# 2. If not your runId, branch naming collision (rare with 6-char runId)
+# 3. Use more specific branch name or wait for other run to complete
+```
+
+**Restack in Progress**
+```bash
+# Error: "rebase in progress" or lock file errors
+# Cause: Another operation is modifying branch relationships
+
+# Recovery:
+# 1. Wait for operation to complete (check other terminals/processes)
+# 2. If stale lock, check git status
+git status
+# 3. If safe, remove stale lock (only if certain no rebase running)
+rm .git/rebase-merge -rf  # DANGER: Only if no active rebase
+```
+
+**Cannot Checkout Branch (Worktree Lock)**
+```bash
+# Error: "branch '{name}' is checked out at '.worktrees/...'"
+# Cause: Branch is currently checked out in another worktree
+
+# Recovery:
+# 1. This is expected during parallel execution
+# 2. If need to access branch, either:
+#    a. Work in the worktree where it's checked out
+#    b. Detach the branch in that worktree: cd to worktree && git switch --detach
+#    c. Wait for worktree cleanup to complete
+```
+
+### Rationalization Table
+
+| Shortcut | Why It's Tempting | Why It's Wrong | Correct Approach |
+|----------|-------------------|----------------|------------------|
+| "Repo restack is fine during parallel runs" | Want to keep everything up to date | Affects all tracked branches, causes conflicts between runs | Only run when no spectacular runs active |
+| "Don't need to detach after branch create" | Extra step, seems unnecessary | Branch remains locked in worktree, inaccessible from parent repo | Always `git switch --detach` after branch create in parallel tasks |
+| "Can skip detach in sequential tasks" | Sequential tasks don't have cleanup | Sequential tasks might need branch access later for stacking | Detach is only required for parallel tasks that will be stacked later |
+| "Repo sync during runs is okay" | Want latest changes from remote | Can delete branches concurrent runs are using | Only sync between spectacular executions |
+
+**Remember:** When in doubt about concurrent safety, run the operation in the main repo (not a worktree) and only when all worktrees are cleaned up.
