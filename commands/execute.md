@@ -24,7 +24,7 @@ Where `a1b2c3` is the runId and `magic-link-auth` is the feature slug.
 
 ## Workflow
 
-### Step 0a: Extract Run ID from Plan
+### Step 0a: Extract Run ID and Commit Spec Directory
 
 **First action**: Read the plan and extract the RUN_ID from frontmatter.
 
@@ -32,6 +32,10 @@ Where `a1b2c3` is the runId and `magic-link-auth` is the feature slug.
 # Extract runId from plan frontmatter
 RUN_ID=$(grep "^runId:" {plan-path} | awk '{print $2}')
 echo "RUN_ID: $RUN_ID"
+
+# Get spec directory (e.g., specs/a1b2c3-magic-link-auth/)
+SPEC_DIR=$(dirname {plan-path})
+echo "SPEC_DIR: $SPEC_DIR"
 ```
 
 **If RUN_ID not found:**
@@ -41,13 +45,57 @@ RUN_ID=$(echo "{feature-name}-$(date +%s)" | shasum -a 256 | head -c 6)
 echo "Generated RUN_ID: $RUN_ID (plan missing runId)"
 ```
 
+**Announce:** "Executing with RUN_ID: {run-id}"
+
+**CRITICAL - Commit Spec Directory First:**
+
+Before any implementation work, the spec directory must be committed to `{run-id}-main` branch. This creates the anchor point for all task branches.
+
+```bash
+# Check if {run-id}-main branch already exists
+if git show-ref --verify --quiet refs/heads/{run-id}-main; then
+  echo "Branch {run-id}-main already exists - spec already committed"
+else
+  echo "Creating {run-id}-main branch with spec and plan"
+
+  # Stage entire spec directory
+  git add $SPEC_DIR
+
+  # Create branch and commit using gs branch create
+  gs branch create {run-id}-main -m "Spec + Plan: {feature-name}
+
+Specification and execution plan for this feature.
+
+Files:
+- $SPEC_DIR/spec.md
+- $SPEC_DIR/plan.md
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+
+  # Verify commit
+  git log -1 --oneline
+  git show --stat
+fi
+```
+
+**This creates:**
+- Branch: `{run-id}-main`
+- Commit: Contains spec.md + plan.md
+- Base: All task branches will stack on this
+
+**Why this matters:**
+- Every task commit has spec/plan in shared git history
+- Spec-code traceability preserved in git graph
+- All implementation work references the spec anchor
+
 **Store RUN_ID for use in:**
-- Branch naming: `{run-id}-task-X-Y-name`
+- Base branch: `{run-id}-main`
+- Task branches: `{run-id}-task-X-Y-name`
 - Filtering: `git branch | grep ^{run-id}-`
 - Cleanup: Identify which branches belong to this run
 - Worktree naming: `.worktrees/{run-id}-main` and `.worktrees/{run-id}-task-{phase}-{task}`
-
-**Announce:** "Executing with RUN_ID: {run-id}"
 
 ### Step 0b: Check for Existing Work
 
@@ -130,12 +178,11 @@ git status
 
 3. If worktree does NOT exist, create it:
 ```bash
-# Get current branch
-CURRENT_BRANCH=$(git branch --show-current)
-echo "Creating worktree from branch: $CURRENT_BRANCH"
+# Create main worktree from {run-id}-main branch (created in Step 0a)
+echo "Creating worktree from branch: {run-id}-main"
 
 # Create main worktree for this run
-git worktree add .worktrees/{run-id}-main $CURRENT_BRANCH
+git worktree add .worktrees/{run-id}-main {run-id}-main
 
 # Verify creation
 git worktree list | grep "{run-id}-main"
@@ -146,15 +193,16 @@ ls -la .worktrees/{run-id}-main
 ```bash
 cd .worktrees/{run-id}-main
 pwd  # Should show .worktrees/{run-id}-main path
-git branch --show-current  # Should show base branch
+git branch --show-current  # Should show {run-id}-main
 git status  # Should be clean
 ```
 
 5. Report completion:
    - Worktree path: `.worktrees/{run-id}-main`
-   - Base branch name
+   - Base branch: `{run-id}-main`
    - Status: new or resumed
    - Working directory is clean
+   - Spec/plan committed and accessible
 
 CRITICAL:
 - ✅ Use `managing-worktrees` skill Pattern 1
@@ -343,12 +391,17 @@ For phases where tasks are independent:
    cd ../..  # Return to main repo
    ```
 
+   The current branch will be:
+   - **Phase 1**: `{run-id}-main` (initial spec/plan commit)
+   - **Phase 2+**: Last task from previous phase (e.g., `{run-id}-task-1-3-schema`)
+
    2. Create parallel task worktrees (one per task):
    ```bash
    # Create .worktrees directory if needed
    mkdir -p .worktrees
 
-   # For each parallel task, create isolated worktree (namespaced by RUN_ID)
+   # For each parallel task, create isolated worktree from CURRENT branch
+   # This ensures parallel work builds on previous phase completion
    git worktree add .worktrees/{run-id}-task-{phase}-{task-1} $CURRENT_BRANCH
    git worktree add .worktrees/{run-id}-task-{phase}-{task-2} $CURRENT_BRANCH
    # ... etc for each parallel task in this phase
@@ -361,7 +414,7 @@ For phases where tasks are independent:
 
    4. Report:
    - List of worktrees created with their absolute paths
-   - Base branch name
+   - Base branch: `$CURRENT_BRANCH` (dynamically determined from main worktree)
    - Confirmation all worktrees are ready
    - Number of worktrees created
 
