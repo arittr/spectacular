@@ -116,13 +116,16 @@ pnpm version major    # 1.1.0 → 2.0.0
 
 **Constitutions** are immutable snapshots of architectural truth stored in `docs/constitutions/`:
 
+- **meta.md** - Version metadata, changelog, and rationale
 - **architecture.md** - Layer boundaries and project structure
-- **patterns.md** - Mandatory patterns (e.g., "use next-safe-action for all server actions")
-- **tech-stack.md** - Approved libraries and versions
-- **schema-rules.md** - Database design philosophy
-- **testing.md** - Testing requirements
+- **patterns.md** - Mandatory patterns (e.g., skill format, TodoWrite usage, RED-GREEN-REFACTOR)
+- **tech-stack.md** - Required dependencies and tools
+- **schema-rules.md** - File naming and directory structure conventions
+- **testing.md** - Validation approach for documentation-only project
 
 Constitutions are **versioned** (v1/, v2/, etc.) with a `current/` symlink pointing to active version. Use the `versioning-constitutions` skill to create new versions when architectural rules change.
+
+**Current version:** v1 establishes plugin architecture, commands vs skills separation, superpowers integration patterns, and git-spice workflows. See `docs/constitutions/current/meta.md` for details.
 
 ### Task Chunking Philosophy
 
