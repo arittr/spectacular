@@ -2,62 +2,78 @@
 
 Spec-anchored, stack-driven development workflows with automatic parallel task execution for Claude Code.
 
->[!NOTE]
->The `/spectacular:execute` workflow is tightly coupled to git-spice for PR stacking. Support for Graphite (and other engines) coming soon!
+> [!NOTE]
+> The `/spectacular:execute` workflow is tightly coupled to git-spice for PR stacking. Support for Graphite (and other engines) coming soon!
 
-## What is Spectacular?
+[![Install](https://img.shields.io/badge/install-arittr%2Fspectacular-5B3FFF?logo=claude)](https://github.com/
+arittr/spectacular#installation)
+[![Version](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/arittr/spectacular
+/main/.claude-plugin/plugin.json&label=version&query=$.version&color=blue)](https://github.com/arittr/spectacu
+lar/releases)
 
-Spectacular extends [superpowers](https://github.com/obra/superpowers) with commands and skills for spec-anchored development:
+## Overview
 
-- **`/spectacular:spec`** - Generate comprehensive feature specifications from brief descriptions
+Spectacular extends [superpowers](https://github.com/obra/superpowers) with commands and skills for spec-anchored development and long running tasks:
+
+- **`/spectacular:spec`** - Generate feature specifications from natural language descriptions
 - **`/spectacular:plan`** - Decompose specs into executable plans with automatic dependency analysis
-- **`/spectacular:execute`** - Execute plans with automatic sequential/parallel orchestration
+- **`/spectacular:execute`** - Execute plans with automatic sequential/parallel orchestration and checkpointing via git-spice stacks
 
-## Why Spectacular?
+### The Problem
 
-**The Problem:** Traditional feature development suffers from:
+Traditional AI-assisted feature development suffers from:
 
-- **Spec drift**: Specs get out of sync with code, or don't exist at all
-- **Massive PRs**: Large features become 5000-line diffs that nobody wants to review
-- **Sequential bottlenecks**: Everything runs one-at-a-time, even independent work
-- **Architectural drift**: Rules get duplicated, outdated, or ignored across the codebase
+- **Context drift** - Long running tasks lose context, leading to bugs and missed requirements
+- **Spec drift** - Specs get out of sync with code or don't exist at all
+- **Massive PRs** - Large features become 5000-line diffs that nobody wants to review
+- **Sequential bottlenecks** - Everything runs one-at-a-time, even independent work
+- **Architectural drift** - Rules get duplicated, outdated, or ignored across the codebase
 
-**The Spectacular Solution:**
+### The Solution
 
-- **Spec anchoring**: Every line of code traces back to spec + constitution - no drift, no guessing
-- **Automatic parallelization**: Independent tasks run simultaneously via git worktrees - no manual orchestration
-- **Reviewable PRs**: Auto-stacked branches keep changes small and focused - reviewers see bite-sized diffs
-- **Constitution versioning**: Architectural rules evolve explicitly with immutable history
+- **Context anchoring** - Tasks run in subagents with isolated context pre-loaded with the spec and constitution
+- **Spec anchoring** - Every line of code traces back to spec + constitution
+- **Automatic parallelization** - Independent tasks run simultaneously via git worktrees
+- **Reviewable PRs** - Auto-stacked branches keep diffs small and focused
+- **Constitution versioning** - Architectural rules evolve explicitly with immutable history
 
-## Key Features
+## How It Works
 
-### 1. Spec Anchoring via Specifications & Constitutions
+### 1. Specifications & Constitutions
 
-Every feature starts with a comprehensive spec that serves as the **anchor point** for all implementation work:
+Every feature starts with a comprehensive spec that serves as the anchor point for all implementation:
 
-- **Specifications** define WHAT to build (requirements, architecture, acceptance criteria)
-- **Constitutions** define foundational rules (mandatory patterns, tech stack, layer boundaries)
+- **Specifications** (`specs/{id}-{name}/spec.md`) define WHAT to build - requirements, architecture, acceptance criteria
+- **Constitutions** (`docs/constitutions/`) define foundational rules - mandatory patterns, tech stack, layer boundaries
 - Specs reference constitutions instead of duplicating rules
-- All implementation traces back to the spec - no drift, no guessing
+- All implementation traces back to the spec
 
-### 2. Parallel Implementation with Execute
+### 2. Automatic Parallelization
 
-Automatic parallelization based on file dependency analysis:
+The planner analyzes file dependencies to identify independent work:
 
-- Analyzes which tasks share files (must be sequential)
-- Identifies independent tasks (can run in parallel)
-- Uses git worktrees for true parallel isolation - no conflicts
-- Scales time savings with feature complexity
+- Tasks sharing files must run sequentially
+- Independent tasks run in parallel via git worktrees
+- Time savings scale with feature complexity
+- No manual orchestration required
 
-### 3. Automatic Stacking & PR Chunking
+### 3. Quality Gates
 
-Built-in git-spice integration for reviewable pull requests:
+After each phase or set of tasks, automatic code review ensures adherence:
+
+- Reviews implementation against spec requirements
+- Validates compliance with constitution rules
+- Catches drift before it compounds
+- Corrects implementation before proceeding to next phase
+
+### 4. Stacked PRs
+
+Built-in git-spice integration creates reviewable pull requests:
 
 - Each task becomes a branch in a stack
-- Sequential tasks stack linearly: `task-1 → task-2 → task-3`
+- Sequential tasks: `task-1 → task-2 → task-3`
 - Parallel tasks branch from same base, then stack for review
-- Submit entire feature as stacked PRs with `gs stack submit`
-- Reviewers see small, focused changes instead of massive diffs
+- Submit entire feature with `gs stack submit`
 
 ## Dependencies
 
@@ -67,13 +83,14 @@ Spectacular builds on these excellent projects:
 - **[git-spice](https://github.com/abhinav/git-spice)** - Stacked branch management
 - **Claude Code** - AI-native development environment
 
-## Quick Start
+## Installation
 
 ### 1. Install Dependencies
 
 ```bash
 # Install superpowers plugin
-/plugin marketplace add obra/superpowers
+# In Claude Code
+/plugin marketplace add obra/superpowers-marketplace
 /plugin install superpowers@superpowers-marketplace
 
 # Install git-spice
@@ -87,338 +104,166 @@ brew install git-spice  # macOS
 /plugin install spectacular@spectacular
 ```
 
-_Note: If spectacular is not yet in the marketplace, clone this repo to your local plugins directory._
-
 ### 3. Initialize Your Project
 
 ```bash
 /spectacular:init
 ```
 
-This checks dependencies, configures .gitignore, and validates your environment.
+This validates dependencies, configures `.gitignore`, and initializes git-spice.
 
-### 4. Run Your First Workflow
+> [!NOTE]  
+> Spectacular uses ./.worktrees/ to store temporary git worktrees for parallel execution. This directory is added to .gitignore by `/spectacular:init`.
 
-```bash
-# Generate a spec
-/spectacular:spec "user authentication with magic links"
+## Usage
 
-# Create an execution plan
-/spectacular:plan @specs/a1b2c3-auth/spec.md
-
-# Execute with automatic parallelization
-/spectacular:execute @specs/a1b2c3-auth/plan.md
-```
-
-## Example Workflows
-
-### Basic Feature Development
+### Basic Workflow
 
 ```bash
-# 1. Initialize (first time only)
-/spectacular:init
-
-# 2. Generate spec from natural language
+# Generate a spec from concise natural language
 /spectacular:spec "admin dashboard with real-time analytics"
 
-# 3. Review the generated spec
-cat specs/d4e5f6-admin-dashboard/spec.md
+# or be more conversational
+/spectacular:spec now that weve added a bunch of features lets look and the opportunities for refactor. anything we can make more DRY? any component trees we can modularize? any bad state management? any other recommends? take a look and spec it out
 
-# 4. Generate implementation plan with automatic phase detection
-/spectacular:plan @specs/d4e5f6-admin-dashboard/spec.md
+# Review the generated spec from the newly created spec directory
+cat specs/a1b2c3-refactor-components/spec.md
+
+# Generate implementation plan
+/spectacular:plan @specs/a1b2c3-refactor-components/spec.md
 
 # Plan output shows:
-# - Phase 1 (sequential): Database + Models
-# - Phase 2 (parallel): 3 services run simultaneously
-# - Phase 3 (sequential): Actions + UI
+# - Phase 1 (sequential): Extract shared utilities
+# - Phase 2 (parallel): 3 component refactors run simultaneously
+# - Phase 3 (sequential): Update tests
 # - Estimated parallelization time savings
 
-# 5. Execute with automatic parallel orchestration
-/spectacular:execute @specs/d4e5f6-admin-dashboard/plan.md
+# Execute with automatic parallel orchestration
+/spectacular:execute @specs/a1b2c3-refactor-components/plan.md
 
-# 6. Submit as stacked PRs for review
+# Submit as stacked PRs
 gs stack submit
 ```
 
-### With Constitution Management
+### Working with Constitutions
 
-For projects with architectural rules:
+Constitutions are immutable snapshots of architectural rules stored in `docs/constitutions/`:
+
+**Setup:**
 
 ```bash
-# 1. Initialize with constitutions directory
-/spectacular:init
 mkdir -p docs/constitutions/v1
-# Create architecture.md, patterns.md, tech-stack.md, etc.
+# Create: architecture.md, patterns.md, tech-stack.md, schema-rules.md, testing.md
 ln -s v1 docs/constitutions/current
-
-# 2. Specs reference constitution rules
-/spectacular:spec "user authentication with magic links"
-# Spec will reference @docs/constitutions/current/patterns.md instead of duplicating
-
-# 3. When patterns evolve, ask Claude to version the constitution
 ```
 
-Example prompt:
+**Updating your constitution (infrequently):**
+
+Ask Claude to version the constitution when architectural rules change:
 
 ```
-"We're adopting Zod for runtime validation across the app. Update our
- constitution to add Zod to tech-stack.md and create a pattern in
- patterns.md for validation schemas."
+"We're adopting Zod for runtime validation. Update our constitution to
+ add Zod to tech-stack.md and create a validation pattern in patterns.md."
 ```
 
-Claude will:
+Claude will create a new version directory (v2), copy all files, make the requested changes, and update the `current/` symlink.
 
-- Create docs/constitutions/v2/
-- Copy all files from v1 to v2
-- Update tech-stack.md with Zod
-- Add validation pattern to patterns.md
-- Update current/ symlink to point to v2
-- Document the change in meta.md changelog
-
-```bash
-# 4. Execute with constitutional compliance
-/spectacular:execute @specs/a1b2c3-auth/plan.md
-# Subagents follow current constitution (now v2) for implementation
-```
-
-## Advanced Features
-
-### Constitution Versioning
-
-The `versioning-constitutions` skill helps manage your project's architectural rules (constitutions) as they evolve over time.
-
-**What are Constitutions?**
-
-Constitutions are immutable snapshots of architectural truth - the foundational rules that, if violated, break your architecture. They live in `docs/constitutions/` and include:
-
-- **patterns.md** - Mandatory patterns (e.g., "use next-safe-action for all server actions")
-- **tech-stack.md** - Approved libraries and versions
-- **architecture.md** - Layer boundaries and project structure
-- **schema-rules.md** - Database design philosophy
-- **testing.md** - Testing requirements
-
-**When to Create a New Version:**
-
-Always create a new version when:
+**When to create a new version:**
 
 - Adding/removing/relaxing a mandatory pattern
 - Changing tech stack (e.g., Prisma → Drizzle)
 - Updating architectural boundaries
 - Major library version changes with breaking patterns
 
-**How to Update Your Constitution:**
+### Git-Spice Integration
 
-There's no slash command for constitution versioning - instead, ask Claude to use the skill:
+Spectacular uses [git-spice](https://github.com/abhinav/git-spice) for stacked branch management:
 
-```
-# Example prompts to trigger the versioning-constitutions skill:
-
-"We're adopting Effect-TS for error handling. Update our constitution to
- make it a mandatory pattern."
-
-"We're migrating from Prisma to Drizzle. Create a new constitution version
- that updates tech-stack.md and removes Prisma patterns."
-
-"We're adding a new 'agents' layer to our architecture. Version the
- constitution to document this change in architecture.md."
-
-"We decided next-safe-action is now optional, not mandatory. Create a new
- constitution version that relaxes this requirement."
-```
-
-**What the Skill Does:**
-
-1. Reads `docs/constitutions/current/meta.md` to get current version
-2. Creates new version directory (e.g., `v1` → `v2`)
-3. Copies current version files to new directory
-4. Makes ONLY the requested changes (minimal diff)
-5. Updates `meta.md` with version number and changelog
-6. Updates `current/` symlink to point to new version
-7. Reports what changed and why
-
-**Key Principle:** Constitution versions are immutable. Never edit old versions - always create new ones. This preserves history, enables rollback, and makes changes explicit.
-
-**Test for Constitutionality:**
-
-- ✅ Constitutional: "Must use next-safe-action" → violating breaks type safety
-- ❌ Not constitutional: "Forms should have submit button" → just a convention
-
-Constitution = Architectural rules. Specs = Implementation patterns.
-
-### Git-Spice Stacked Branches
-
-The `using-git-spice` skill provides comprehensive guidance for managing stacked branches with git-spice.
-
-**Why Stacked Branches?**
-
-Stacked branches (also called "stacked diffs" or "dependent PRs") allow you to:
-
-- Break large features into reviewable chunks
-- Submit dependent work before prerequisites merge
-- Keep PR review scope small and focused
-- Maintain velocity on dependent work
-
-**Key Concepts:**
+**Key concepts:**
 
 ```
-┌── feature-c     ← upstack from feature-b
-├── feature-b     ← upstack from feature-a
-├── feature-a     ← first branch in stack
+┌── task-3        ← upstack from task-2
+├── task-2        ← upstack from task-1
+├── task-1        ← first branch in stack
 main (trunk)
 ```
 
-- **Stack**: All connected branches (upstack + downstack)
-- **Upstack**: Branches built on current branch (children)
-- **Downstack**: Branches below current to trunk (parents)
-
-**Common Commands:**
+**Common commands:**
 
 ```bash
-# Initialize repo (once)
-gs repo init
-
-# Create stacked branches
-gs branch create feature-a      # Creates branch on current
-git add . && git commit -m "A"
-gs branch create feature-b      # Stacks on feature-a
-git add . && git commit -m "B"
-
-# View stack
-gs log short  # Quick view
-gs log long   # Detailed view
+# View your stack
+gs log short
 
 # Submit entire stack as PRs
 gs stack submit
-
-# Move branch to new base
-gs upstack onto main
 
 # Sync with remote, clean up merged branches
 gs repo sync
 ```
 
-**Spectacular Integration:**
-
-Spectacular uses git-spice for task branch management:
+**How Spectacular uses stacks:**
 
 - Sequential tasks stack linearly: `task-1 → task-2 → task-3`
-- Parallel tasks branch from same base, then stack: `task-2.1 → task-2.2 → task-2.3`
-- Submit entire feature as stack: `gs stack submit`
+- Parallel tasks branch from same base, then stack for review in the main repo (e.g. outside the worktree)
+- Each task = one branch = one reviewable PR
 
-The skill provides:
-
-- Command reference with shortcuts
-- Common workflow patterns
-- Troubleshooting for conflicts and rebases
-- Best practices for PR submission
+See the `using-git-spice` skill for detailed command reference and troubleshooting.
 
 ## Project Structure
 
-### Spectacular Plugin Structure
-
-```
-spectacular/
-├── .claude-plugin/
-│   └── plugin.json                  # Plugin metadata
-├── commands/
-│   ├── spectacular:init.md          # Dependency checking
-│   ├── spectacular:spec.md          # Spec generation
-│   ├── spectacular:plan.md          # Task decomposition
-│   └── spectacular:execute.md       # Parallel execution
-├── skills/
-│   ├── decomposing-tasks/           # Plan generation logic
-│   ├── writing-specs/               # Spec generation logic
-│   ├── versioning-constitutions/    # Constitution management
-│   └── using-git-spice/             # Git-spice workflows
-└── README.md
-```
-
-### Your Project Structure (After Using Spectacular)
+After using Spectacular, your project will have:
 
 ```
 your-project/
-├── docs/
-│   └── constitutions/
-│       ├── current -> v2/           # Symlink to current version
-│       ├── v1/                      # Historical version
-│       │   ├── meta.md
-│       │   ├── architecture.md
-│       │   ├── patterns.md
-│       │   ├── tech-stack.md
-│       │   ├── schema-rules.md
-│       │   └── testing.md
-│       └── v2/                      # Current version
-│           ├── meta.md              # Version info + changelog
-│           ├── architecture.md      # Layer boundaries
-│           ├── patterns.md          # Mandatory patterns
-│           ├── tech-stack.md        # Approved libraries
-│           ├── schema-rules.md      # Database philosophy
-│           └── testing.md           # Testing requirements
+├── docs/constitutions/              # Optional: architectural rules
+│   ├── current -> v2/               # Symlink to active version
+│   ├── v1/                          # Historical versions
+│   └── v2/                          # Current version
+│       ├── meta.md                  # Version info + changelog
+│       ├── architecture.md          # Layer boundaries
+│       ├── patterns.md              # Mandatory patterns
+│       ├── tech-stack.md            # Approved libraries
+│       ├── schema-rules.md          # Database philosophy
+│       └── testing.md               # Testing requirements
 ├── specs/
 │   ├── a1b2c3-feature-name/
 │   │   ├── spec.md                  # Feature specification
-│   │   ├── plan.md                  # Execution plan
-│   │   └── clarifications.md        # Optional: questions
+│   │   └── plan.md                  # Execution plan
 │   └── d4e5f6-another-feature/
 │       ├── spec.md
 │       └── plan.md
 ├── .worktrees/                      # Temporary (gitignored)
-│   ├── a1b2c3-task-2-1/             # Parallel task workspace
-│   └── a1b2c3-task-2-2/             # Parallel task workspace
-└── .gitignore                       # Includes .worktrees/
+│   ├── a1b2c3-task-1/               # Task workspaces for parallel execution
+│   └── a1b2c3-task-2/
+└── .gitignore                       # Configured by /spectacular:init
 ```
 
-## Commands & Skills
+## Reference
 
 ### Commands
 
-- **`spectacular:init`** - Environment initialization and dependency checking
-- **`spectacular:spec`** - Feature specification generation
-- **`spectacular:plan`** - Task decomposition with dependency analysis
-- **`spectacular:execute`** - Parallel/sequential execution orchestration
+- `/spectacular:init` - Validate environment and dependencies
+- `/spectacular:spec` - Generate feature specification
+- `/spectacular:plan` - Create execution plan with dependency analysis
+- `/spectacular:execute` - Execute plan with automatic parallelization
 
 ### Skills
 
-- **`decomposing-tasks`** - Analyze specs and create execution plans
-- **`writing-specs`** - Generate lean, architecture-focused specifications
-- **`versioning-constitutions`** - Manage evolving architectural rules (constitutions)
-- **`using-git-spice`** - Stacked branch management with git-spice CLI
+- `decomposing-tasks` - Analyze specs and create execution plans
+- `writing-specs` - Generate lean, architecture-focused specifications
+- `versioning-constitutions` - Manage evolving architectural rules
+- `using-git-spice` - Stacked branch management
 
-## Documentation
+### Documentation
 
-- **Full Command Reference**: [commands/README.md](commands/README.md)
-- **Skills Directory**: [skills/](skills/)
-- **Superpowers**: [obra/superpowers](https://github.com/obra/superpowers)
-- **Git-Spice**: [abhinav/git-spice](https://github.com/abhinav/git-spice)
+- [Command Details](commands/README.md)
+- [Skills Directory](skills/)
+- [Superpowers](https://github.com/obra/superpowers)
+- [Git-Spice](https://github.com/abhinav/git-spice)
 
 ## Contributing
 
 Spectacular is designed to work with [superpowers](https://github.com/obra/superpowers). Consider contributing to both projects!
-
-### Version Management
-
-Version is managed via `package.json` and automatically synced to all plugin JSON files.
-
-**Release (bump version + push):**
-```bash
-pnpm release:patch    # 1.1.0 -> 1.1.1 + push
-pnpm release:minor    # 1.1.0 -> 1.2.0 + push
-pnpm release:major    # 1.1.0 -> 2.0.0 + push
-```
-
-**Just bump (no push):**
-```bash
-pnpm version patch    # 1.1.0 -> 1.1.1
-pnpm version minor    # 1.1.0 -> 1.2.0
-pnpm version major    # 1.1.0 -> 2.0.0
-```
-
-This automatically:
-1. Updates `package.json`
-2. Syncs to `.claude-plugin/plugin.json`
-3. Syncs to `.claude-plugin/marketplace.json`
-4. Creates git commit and tag
-5. Pushes to remote (if using `release:*` scripts)
 
 ## License
 
