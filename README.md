@@ -5,8 +5,9 @@ Spec-anchored, stack-driven development workflows with automatic parallel task e
 > [!NOTE]
 > The `/spectacular:execute` workflow is tightly coupled to git-spice for PR stacking. Support for Graphite (and other engines) coming soon!
 
-![Install](https://img.shields.io/badge/install-arittr%2Fspectacular-5B3FFF?logo=claude)
-![Version](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/arittr/spectacular/main/.claude-plugin/plugin.json&label=version&query=$.version&color=orange)
+[![Install](https://img.shields.io/badge/install-arittr%2Fspectacular-5B3FFF?logo=claude)](https://github.com/arittr/spectacular#installation)
+[![Version](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/arittr/spectacular/main/.claude-plugin/plugin.json&label=version&query=$.version&color=orange)](https://github.com/arittr/spectacular/releases)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## Overview
 
