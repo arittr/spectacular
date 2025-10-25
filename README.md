@@ -17,6 +17,9 @@ Spectacular extends [superpowers](https://github.com/obra/superpowers) with comm
 - **`/spectacular:plan`** - Decompose specs into executable plans with automatic dependency analysis
 - **`/spectacular:execute`** - Execute plans with automatic sequential/parallel orchestration and checkpointing via git-spice stacks
 
+>[!WARNING]
+>`/spectacular:execute` should be run with `--permission-mode bypassPermissions` for best results
+
 ### The Problem
 
 Traditional AI-assisted feature development suffers from:
