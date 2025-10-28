@@ -40,7 +40,24 @@ git worktree prune
 
 **Why mandatory:** Worktrees can be deleted manually without `git worktree remove`, leaving stale entries in `.git/worktrees/`. These stale entries cause `git worktree list` to show false positives.
 
-### Step 2: Check for Worktree Existence
+### Step 2: Verify Git-Spice Initialization
+
+**Check git-spice status once in main repo (NOT per-worktree):**
+
+```bash
+gs ls 2>/dev/null
+```
+
+**If command fails** (non-zero exit code):
+```bash
+gs repo init --continue-on-conflict
+```
+
+**Why here:** `gs repo init` is repository-wide like `git init`, not per-worktree. Git-spice metadata lives in `.git/spice/` (shared by all worktrees). Check once before creating any worktrees.
+
+**Why `--continue-on-conflict`:** If `.git/spice/` exists with conflicts, continue anyway. Git-spice will use existing config.
+
+### Step 3: Check for Worktree Existence
 
 ```bash
 git worktree list | grep ".worktrees/main-{runId}"
@@ -48,12 +65,12 @@ git worktree list | grep ".worktrees/main-{runId}"
 
 **If worktree exists:**
 - Extract path from output
-- Proceed to Step 3 (verify accessibility)
+- Proceed to Step 4 (verify accessibility)
 
 **If worktree does NOT exist:**
-- Proceed to Step 4 (create worktree)
+- Proceed to Step 5 (create worktree)
 
-### Step 3: Verify Worktree Accessibility
+### Step 4: Verify Worktree Accessibility
 
 **If worktree already exists, verify it's accessible:**
 
@@ -70,9 +87,9 @@ pwd
 - STOP - do not proceed
 
 **If verification succeeds:**
-- Proceed to Step 5 (git-spice check)
+- Proceed to Step 6 (report status)
 
-### Step 4: Create Worktree
+### Step 5: Create Worktree
 
 **Only if worktree does NOT exist:**
 
@@ -90,21 +107,6 @@ pwd
 ```
 
 **Verify output contains** `main-{runId}`.
-
-### Step 5: Verify Git-Spice Initialization
-
-**After entering worktree (create or verify), check git-spice:**
-
-```bash
-gs ls 2>/dev/null
-```
-
-**If command fails** (non-zero exit code):
-```bash
-gs repo init --continue-on-conflict
-```
-
-**Why mandatory:** Git-spice metadata is stored in `.git/` (shared with main repo), but worktrees can be created before git-spice is initialized or after git-spice is uninstalled/reinstalled. Always verify.
 
 ### Step 6: Report Status
 
@@ -205,7 +207,7 @@ git worktree prune
 |----------------|----------------|-------------------|
 | "Worktree list should be accurate, skip prune" | Manual deletion leaves stale entries causing false positives | Always prune first (Scenario 1) |
 | "We just created worktree, it exists" | Worktree creation can succeed but directory be inaccessible (permissions, corruption) | Verify with `pwd` after every `cd` (Scenario 8) |
-| "Git-spice initialized in main repo, worktree has it" OR "Each worktree is independent, git-spice state doesn't transfer" | Git-spice metadata IS shared via .git/, but worktrees can be created before initialization or after reinstall | Always verify with `gs ls 2>/dev/null` in worktree, only init if needed (Scenario 3) |
+| "Git-spice already initialized, skip check" OR "Will check in worktree later" | Git-spice can be uninstalled/reinstalled between sessions; checking in main repo ensures all worktrees benefit from one-time init | Always verify with `gs ls 2>/dev/null` in MAIN REPO before creating worktrees (Step 2) |
 | "User asked to cleanup, they know what they want" | Users don't always realize they have uncommitted changes or unpushed branches | Always check and require confirmation (Scenario 4) |
 | "Git worktree remove should handle all cases" | Orphaned and locked worktrees fail with git worktree remove | Detect orphaned status, fallback to `rm -rf` (Scenario 5) |
 | "Lock files tell us dependencies, skip CLAUDE.md" | CLAUDE.md may specify custom install (make, scripts, multi-step) | Check CLAUDE.md FIRST (Scenario 7) |

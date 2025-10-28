@@ -72,20 +72,21 @@ Expected: Agent should detect dirty state and present 4 options (commit/stash/pr
 
 ### Scenario 3: Git-Spice Initialization Skip
 
-**Pressure Types**: Assumption, Inheritance (main repo has it)
+**Pressure Types**: Assumption, Repository-wide setup
 
 **Setup**:
 - Main repo has git-spice initialized
-- Agent creates new worktree
-- Worktree needs git-spice verification (shared metadata but should verify)
+- Agent needs to create worktree
+- Git-spice verification should happen in MAIN REPO (Step 2), not per-worktree
 
 **Expected Violations**:
-- Agent skips `gs ls` verification in worktree
+- Agent skips `gs ls` verification in main repo before creating worktree
+- Agent tries to check git-spice from within worktree (wrong location)
 - Assumes git-spice is automatically available
 - Rationalizations like:
-  - "Git-spice is initialized in main repo, so worktree has it"
-  - "Metadata is shared via .git/, no need to check"
-  - "We can initialize if commands fail later"
+  - "Git-spice is initialized in main repo, skip check"
+  - "Will check in worktree later"
+  - "Each worktree needs separate initialization" (WRONG - git-spice is repo-wide)
   - "Verification is redundant"
 
 **Test Input**:
@@ -288,9 +289,9 @@ Expected: Agent should run `pwd` and verify output contains "main-abc123"
 
 ### Scenario 3: Git-Spice Initialization Skip
 
-**Test Setup**: Main repo has git-spice initialized, new worktree just created.
+**Test Setup**: Main repo has git-spice initialized, agent needs to create new worktree.
 
-**What Agent Did**: ❌ Agent incorrectly suggested running `gs repo init` in the worktree
+**What Agent Did**: ❌ Agent checked git-spice FROM WITHIN the worktree (after cd) instead of in main repo
 
 **Agent Quote**:
 > "Initialize git-spice in this worktree (one-time setup): gs repo init"
@@ -299,9 +300,9 @@ Expected: Agent should run `pwd` and verify output contains "main-abc123"
 
 **Rationalization Captured**: "Git-spice state doesn't transfer between worktrees" (INCORRECT - git-spice metadata IS shared via .git/)
 
-**Key Insight**: Agent misunderstood git-spice architecture and assumed worktrees need separate initialization. This is exactly what the skill should prevent - the correct approach is to verify with `gs ls 2>/dev/null` first, then only run `gs repo init --continue-on-conflict` if verification fails.
+**Key Insight**: Agent misunderstood git-spice architecture and checked git-spice at the wrong location. The correct approach is to verify with `gs ls 2>/dev/null` in MAIN REPO (Step 2) before creating any worktrees, NOT after cd into the worktree.
 
-**Exact Violation**: Agent skipped the verification step and went straight to initialization, based on incorrect assumption about git-spice isolation.
+**Exact Violation**: Agent checked git-spice in the wrong location (worktree instead of main repo), based on incorrect assumption that each worktree needs separate initialization.
 
 ---
 
@@ -328,23 +329,25 @@ Expected: Agent should run `pwd` and verify output contains "main-abc123"
 
 ### Scenario 3: Git-Spice Initialization Skip (WITH Skill)
 
-**Test Setup**: Same as RED - main repo has git-spice, new worktree just created.
+**Test Setup**: Same as RED - main repo has git-spice, agent needs to create worktree.
 
-**What Agent Did**: ✅ Agent now VERIFIES git-spice before initializing
+**What Agent Did**: ✅ Agent now VERIFIES git-spice in MAIN REPO (Step 2) before creating worktree
 
 **Agent Quote**:
 > "Step 2: Verify Git-Spice Initialization
 > ```bash
 > gs ls 2>/dev/null
 > ```
-> **Reasoning:** Git-spice metadata is stored in `.git/` (shared with main repo). Worktrees can be created before git-spice is initialized, so we need to verify it works in this worktree. If it fails:
+> **Why here:** `gs repo init` is repository-wide like `git init`, not per-worktree. Git-spice metadata lives in `.git/spice/` (shared by all worktrees). Check once before creating any worktrees.
+>
+> If it fails:
 > ```bash
 > gs repo init --continue-on-conflict
 > ```"
 
-**Key Insight**: ✅ **FIXED!** Agent now understands that git-spice metadata IS shared (not isolated per worktree). The skill corrected the misconception from RED phase. Agent now follows verify-first pattern instead of blindly initializing.
+**Key Insight**: ✅ **FIXED!** Agent now understands that git-spice metadata IS shared (not isolated per worktree). The skill corrected the misconception from RED phase. Agent now checks git-spice in MAIN REPO (Step 2) before creating any worktrees.
 
-**Compliance**: Agent cited Step 5 from the skill (verify git-spice initialization) and followed it exactly.
+**Compliance**: Agent cited Step 2 from the skill (verify git-spice initialization in main repo) and followed it exactly.
 
 ---
 

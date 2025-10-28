@@ -164,14 +164,14 @@ echo "Working in worktree: $CURRENT_DIR"
 
 **All remaining steps (1-4) will execute in this worktree.**
 
-### Step 1: Brainstorm Requirements
+### Step 1: Gather Requirements Through Structured Discovery
 
-**Announce:** "I'm brainstorming the design using Phases 1-3 (Understanding, Exploration, Design Presentation)."
+**Announce:** "I'm gathering requirements through structured discovery (Understanding, Exploration, Design Presentation)."
 
 **Create TodoWrite checklist:**
 
 ```
-Brainstorming for Spec:
+Requirements Discovery for Spec:
 - [ ] Phase 1: Understanding (purpose, constraints, criteria)
 - [ ] Phase 2: Exploration (2-3 approaches proposed)
 - [ ] Phase 3: Design Presentation (design validated)
