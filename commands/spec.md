@@ -150,10 +150,17 @@ Use the `managing-main-worktrees` skill to create or verify the main worktree:
 
 ```bash
 cd .worktrees/main-{run-id}
-pwd  # Verify we're in the worktree
+CURRENT_DIR=$(pwd)
+if [[ "$CURRENT_DIR" != *"main-{run-id}"* ]]; then
+  echo "ERROR: Failed to change to worktree directory"
+  echo "Expected path containing: main-{run-id}"
+  echo "Actual path: $CURRENT_DIR"
+  exit 1
+fi
+echo "Working in worktree: $CURRENT_DIR"
 ```
 
-**Verify output contains** `main-{run-id}` to confirm directory change succeeded.
+**Verify directory change succeeded before proceeding.**
 
 **All remaining steps (1-4) will execute in this worktree.**
 

@@ -186,9 +186,9 @@ echo "Working directory: $WORKING_DIR"
      INSTALL_CMD="pip install -r requirements.txt"
      DETECTED_FROM="requirements.txt"
    # Ruby
-   elif [ -f Gemfile.lock ]; then
+   elif [ -f Gemfile.lock ] || [ -f Gemfile ]; then
      INSTALL_CMD="bundle install"
-     DETECTED_FROM="Gemfile.lock"
+     DETECTED_FROM="Gemfile.lock or Gemfile"
    else
      INSTALL_CMD=""
      DETECTED_FROM="none"
@@ -433,10 +433,12 @@ For phases where tasks are independent:
    TASK: {task-name}
    WORKTREE: {worktree-path}
    BASE BRANCH: {base-branch}
+   WORKING_DIR: {working-dir}
 
    CRITICAL - WORKTREE ISOLATION:
    You are working in an isolated git worktree. This means:
    - You have your own working directory: {worktree-path}
+   - Main worktree base: {working-dir}
    - Other parallel tasks cannot interfere with your files
    - You must cd into your worktree before starting
    - When done, report completion and do NOT clean up worktree

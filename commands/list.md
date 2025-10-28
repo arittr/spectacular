@@ -86,13 +86,20 @@ For each worktree, detect phase, staleness, and orphaned status:
 ```bash
 # Process each worktree
 echo "$WORKTREES" | while IFS= read -r WORKTREE_PATH; do
-  # Extract runId and feature slug from directory name
-  # Format: .worktrees/main-{runId}-{feature-slug}
+  # Extract runId from directory name
+  # Format: .worktrees/main-{runId}/ (no feature slug in directory)
   DIR_NAME=$(basename "$WORKTREE_PATH")
 
-  # Parse: main-{runId}-{feature-slug}
-  RUN_ID=$(echo "$DIR_NAME" | sed 's/^main-//' | cut -d'-' -f1)
-  FEATURE_SLUG=$(echo "$DIR_NAME" | sed 's/^main-//' | cut -d'-' -f2-)
+  # Parse: main-{runId}
+  RUN_ID=$(echo "$DIR_NAME" | sed 's/^main-//')
+
+  # Get feature slug from spec directory name inside worktree
+  SPEC_DIR=$(find "$WORKTREE_PATH/specs" -maxdepth 1 -type d -name "${RUN_ID}-*" 2>/dev/null | head -1)
+  if [ -n "$SPEC_DIR" ]; then
+    FEATURE_SLUG=$(basename "$SPEC_DIR" | sed "s/^${RUN_ID}-//")
+  else
+    FEATURE_SLUG="(unknown)"
+  fi
 
   # Calculate age from directory mtime
   if [[ "$OSTYPE" == "darwin"* ]]; then

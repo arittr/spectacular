@@ -101,7 +101,7 @@ fi
 # Find all branches for this runId
 echo ""
 echo "Branches for {runId}:"
-git branch | grep "^  {runId}-"
+git branch | sed 's/^[* ]*//' | grep "^{runId}-"
 ```
 
 **If no branches found:**
