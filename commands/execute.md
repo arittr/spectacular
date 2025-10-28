@@ -161,66 +161,95 @@ echo "Working directory: $WORKING_DIR"
    ```
 
 3. **Detect from lock files** (third priority - inferred from tooling):
-   Check in this order (first match wins):
+
+   Accumulate install commands for ALL detected ecosystems (supports polyglot projects):
 
    ```bash
-   # Node.js ecosystems
-   if [ -f pnpm-lock.yaml ]; then
-     INSTALL_CMD="pnpm install"
-     DETECTED_FROM="pnpm-lock.yaml"
-   elif [ -f package-lock.json ]; then
-     INSTALL_CMD="npm install"
-     DETECTED_FROM="package-lock.json"
-   elif [ -f yarn.lock ]; then
-     INSTALL_CMD="yarn install"
-     DETECTED_FROM="yarn.lock"
-   elif [ -f bun.lockb ]; then
-     INSTALL_CMD="bun install"
-     DETECTED_FROM="bun.lockb"
-   # Rust
-   elif [ -f Cargo.lock ]; then
-     INSTALL_CMD="cargo build"
-     DETECTED_FROM="Cargo.lock"
-   # Python
-   elif [ -f requirements.txt ]; then
-     INSTALL_CMD="pip install -r requirements.txt"
-     DETECTED_FROM="requirements.txt"
-   # Ruby
-   elif [ -f Gemfile.lock ] || [ -f Gemfile ]; then
-     INSTALL_CMD="bundle install"
-     DETECTED_FROM="Gemfile.lock or Gemfile"
+   INSTALL_COMMANDS=()
+
+   # Node.js package managers (mutually exclusive - use priority order)
+   # Priority: pnpm > yarn > bun > npm
+   if [ -f "pnpm-lock.yaml" ]; then
+     INSTALL_COMMANDS+=("pnpm install")
+     echo "Detected: pnpm-lock.yaml"
+   elif [ -f "yarn.lock" ]; then
+     INSTALL_COMMANDS+=("yarn install")
+     echo "Detected: yarn.lock"
+   elif [ -f "bun.lockb" ]; then
+     INSTALL_COMMANDS+=("bun install")
+     echo "Detected: bun.lockb"
+   elif [ -f "package-lock.json" ]; then
+     INSTALL_COMMANDS+=("npm install")
+     echo "Detected: package-lock.json"
+   fi
+
+   # Check for multiple Node managers (error condition)
+   multi_node_check=0
+   [ -f "pnpm-lock.yaml" ] && ((multi_node_check++))
+   [ -f "yarn.lock" ] && ((multi_node_check++))
+   [ -f "bun.lockb" ] && ((multi_node_check++))
+   [ -f "package-lock.json" ] && ((multi_node_check++))
+
+   if [ "$multi_node_check" -gt 1 ]; then
+     echo "❌ ERROR: Multiple Node.js package managers detected"
+     echo "   Remove all but one of: pnpm-lock.yaml, yarn.lock, bun.lockb, package-lock.json"
+     exit 1
+   fi
+
+   # Other ecosystems (can coexist with Node or each other)
+   for lock_file in Cargo.lock go.mod requirements.txt Pipfile.lock Gemfile.lock Gemfile; do
+     if [ -f "$lock_file" ]; then
+       case "$lock_file" in
+         Cargo.lock)
+           INSTALL_COMMANDS+=("cargo fetch")
+           echo "Detected: Cargo.lock (Rust)"
+           ;;
+         go.mod)
+           INSTALL_COMMANDS+=("go mod download")
+           echo "Detected: go.mod (Go)"
+           ;;
+         requirements.txt)
+           INSTALL_COMMANDS+=("pip install -r requirements.txt")
+           echo "Detected: requirements.txt (Python)"
+           ;;
+         Pipfile.lock)
+           INSTALL_COMMANDS+=("pipenv install --dev")
+           echo "Detected: Pipfile.lock (Python/Pipenv)"
+           ;;
+         Gemfile.lock | Gemfile)
+           INSTALL_COMMANDS+=("bundle install")
+           echo "Detected: $lock_file (Ruby)"
+           break  # Only detect once for Ruby
+           ;;
+       esac
+     fi
+   done
+   ```
+
+4. **Execute all install commands** (if any detected):
+
+   ```bash
+   if [ ${#INSTALL_COMMANDS[@]} -eq 0 ]; then
+     echo "ℹ️  No lock files detected - skipping dependency installation"
+     echo "   (This is expected for projects without external dependencies)"
    else
-     INSTALL_CMD=""
-     DETECTED_FROM="none"
+     echo "📦 Installing dependencies for ${#INSTALL_COMMANDS[@]} ecosystem(s)..."
+
+     for cmd in "${INSTALL_COMMANDS[@]}"; do
+       echo "   Running: $cmd"
+       if eval "$cmd"; then
+         echo "   ✅ Success: $cmd"
+       else
+         echo "   ❌ CRITICAL: Installation failed"
+         echo "      Command: $cmd"
+         echo "      Check error output above for details"
+         exit 1
+       fi
+     done
+
+     echo "✅ All dependencies installed successfully"
    fi
    ```
-
-4. **No lock files found** (skip with info message):
-   ```bash
-   if [ "$DETECTED_FROM" = "none" ]; then
-     echo "INFO: No lock files or dependency instructions found"
-     echo "Skipping dependency installation (project may not require it)"
-     # Continue to Step 1
-   fi
-   ```
-
-**Execute installation:**
-
-```bash
-if [ -n "$INSTALL_CMD" ]; then
-  echo "Detected: $INSTALL_CMD (from $DETECTED_FROM)"
-  echo "Running dependency installation..."
-
-  if $INSTALL_CMD; then
-    echo "✅ Dependencies installed successfully"
-  else
-    echo "❌ CRITICAL: Dependency installation failed"
-    echo "Command: $INSTALL_CMD"
-    echo "Cannot proceed with execution - dependencies required"
-    exit 1
-  fi
-fi
-```
 
 **Critical Error Handling:**
 - If install command fails → STOP execution immediately
