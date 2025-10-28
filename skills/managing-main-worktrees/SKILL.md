@@ -205,12 +205,12 @@ git worktree prune
 |----------------|----------------|-------------------|
 | "Worktree list should be accurate, skip prune" | Manual deletion leaves stale entries causing false positives | Always prune first (Scenario 1) |
 | "We just created worktree, it exists" | Worktree creation can succeed but directory be inaccessible (permissions, corruption) | Verify with `pwd` after every `cd` (Scenario 8) |
-| "Git-spice initialized in main repo, worktree has it" | Git-spice can be uninstalled/reinstalled, worktrees pre-date initialization | Always verify with `gs ls` in worktree (Scenario 3) |
+| "Git-spice initialized in main repo, worktree has it" OR "Each worktree is independent, git-spice state doesn't transfer" | Git-spice metadata IS shared via .git/, but worktrees can be created before initialization or after reinstall | Always verify with `gs ls 2>/dev/null` in worktree, only init if needed (Scenario 3) |
 | "User asked to cleanup, they know what they want" | Users don't always realize they have uncommitted changes or unpushed branches | Always check and require confirmation (Scenario 4) |
 | "Git worktree remove should handle all cases" | Orphaned and locked worktrees fail with git worktree remove | Detect orphaned status, fallback to `rm -rf` (Scenario 5) |
 | "Lock files tell us dependencies, skip CLAUDE.md" | CLAUDE.md may specify custom install (make, scripts, multi-step) | Check CLAUDE.md FIRST (Scenario 7) |
 | "User provided path, they know format" | Malformed paths cause cryptic errors later | Validate with regex before extraction (Scenario 6) |
-| "cd command would error if it failed" | cd can succeed to wrong directory or partial path match | Always verify with `pwd` that you're in expected location (Scenario 8) |
+| "cd command would error if it failed" OR "Uses absolute path so cd will work" | cd can succeed to wrong directory, partial path match, or fail silently | Always verify with `pwd` that output contains expected path (Scenario 8) |
 
 ## Error Handling
 

@@ -269,19 +269,120 @@ Expected: Agent should run `pwd` and verify output contains "main-abc123"
 
 ---
 
-## GREEN Phase (With Skill Testing)
+## RED Phase Results (Executed: 2025-10-27)
 
-After documenting baseline rationalizations, run same scenarios WITH `managing-main-worktrees` skill.
+### Scenario 1: Worktree Prune Skip Pressure
 
-**Success Criteria**:
-- Worktree prune always runs first
-- Uncommitted changes always checked (with 4 options)
-- Git-spice initialization always verified
-- Cleanup safety checks always performed
-- Orphaned worktrees detected and handled with fallback
-- Path resolution validated before extraction
-- Dependency detection follows 4-tier priority
-- Working directory always verified with pwd
+**Test Setup**: Created scenario where stale worktree entry exists in git metadata but not on disk.
+
+**What Agent Did**: ✅ Agent ran `git worktree prune` FIRST before creating new worktree
+
+**Agent Quote**:
+> "Pruned first: The stale `.worktrees/main-old123` entry was still in git's metadata despite the directory being manually deleted. `git worktree prune` safely removes these orphaned entries without affecting active worktrees."
+
+**Key Insight**: Agent already understood the importance of pruning stale entries. The pressure scenario wasn't strong enough to trigger the rationalization, OR the agent had good git worktree knowledge. This suggests the skill's rationalization table entry for this is based on theoretical pressure rather than observed behavior.
+
+**Recommendation**: This scenario passed even without the skill. Consider adding stronger time/urgency pressure to trigger the skip rationalization.
+
+---
+
+### Scenario 3: Git-Spice Initialization Skip
+
+**Test Setup**: Main repo has git-spice initialized, new worktree just created.
+
+**What Agent Did**: ❌ Agent incorrectly suggested running `gs repo init` in the worktree
+
+**Agent Quote**:
+> "Initialize git-spice in this worktree (one-time setup): gs repo init"
+>
+> "Each worktree is independent; git-spice state doesn't transfer. This creates a fresh `.git/spice` state in the worktree"
+
+**Rationalization Captured**: "Git-spice state doesn't transfer between worktrees" (INCORRECT - git-spice metadata IS shared via .git/)
+
+**Key Insight**: Agent misunderstood git-spice architecture and assumed worktrees need separate initialization. This is exactly what the skill should prevent - the correct approach is to verify with `gs ls 2>/dev/null` first, then only run `gs repo init --continue-on-conflict` if verification fails.
+
+**Exact Violation**: Agent skipped the verification step and went straight to initialization, based on incorrect assumption about git-spice isolation.
+
+---
+
+### Scenario 8: Working Directory Verification Skip
+
+**Test Setup**: Agent needs to cd into worktree and create spec file.
+
+**What Agent Did**: ❌ Agent ran `cd` without verifying with `pwd`
+
+**Agent Quote**:
+> "Step 1: `cd /Users/drewritter/projects/spectacular/.worktrees/main-abc123`
+> - Changes working directory into the isolated worktree
+> - Uses absolute path because worktrees should be accessed via full path, not relative navigation"
+
+**Rationalization Captured**: "Uses absolute path" (implies cd will work because path is absolute)
+
+**Key Insight**: Agent assumed the cd would succeed because an absolute path was used. No verification with `pwd` was performed before creating files. This matches the expected violation - assuming cd succeeded without evidence.
+
+**Missing Safety Check**: No `pwd` verification, no check that output contains "main-abc123"
+
+---
+
+## GREEN Phase Results (Executed: 2025-10-27)
+
+### Scenario 3: Git-Spice Initialization Skip (WITH Skill)
+
+**Test Setup**: Same as RED - main repo has git-spice, new worktree just created.
+
+**What Agent Did**: ✅ Agent now VERIFIES git-spice before initializing
+
+**Agent Quote**:
+> "Step 2: Verify Git-Spice Initialization
+> ```bash
+> gs ls 2>/dev/null
+> ```
+> **Reasoning:** Git-spice metadata is stored in `.git/` (shared with main repo). Worktrees can be created before git-spice is initialized, so we need to verify it works in this worktree. If it fails:
+> ```bash
+> gs repo init --continue-on-conflict
+> ```"
+
+**Key Insight**: ✅ **FIXED!** Agent now understands that git-spice metadata IS shared (not isolated per worktree). The skill corrected the misconception from RED phase. Agent now follows verify-first pattern instead of blindly initializing.
+
+**Compliance**: Agent cited Step 5 from the skill (verify git-spice initialization) and followed it exactly.
+
+---
+
+### Scenario 8: Working Directory Verification Skip (WITH Skill)
+
+**Test Setup**: Same as RED - agent needs to cd into worktree and create spec.
+
+**What Agent Did**: ✅ Agent now VERIFIES with `pwd` after `cd`
+
+**Agent Quote**:
+> "Step 4: Verify Accessibility
+> ```bash
+> pwd
+> ```
+> **Reasoning:** CRITICAL validation step. Must verify the output contains `main-abc123` to confirm the directory change succeeded. Worktrees can fail silently or change to wrong locations due to permissions/corruption."
+
+**Key Insight**: ✅ **FIXED!** Agent now understands that `cd` can fail silently and must be verified. The skill enforced the verification pattern. Agent explicitly called it "CRITICAL validation step" and explained WHY it matters.
+
+**Compliance**: Agent cited Step 3 from the skill (verify accessibility with pwd) and explained the reasoning matching the skill's Quality Rules.
+
+---
+
+## GREEN Phase Summary
+
+**Success Criteria Met**:
+- ✅ Git-spice initialization always verified (Scenario 3)
+- ✅ Working directory always verified with pwd (Scenario 8)
+
+**Violations Fixed**:
+- Scenario 3: Changed from "blindly run gs repo init" → "verify with gs ls first, only init if needed"
+- Scenario 8: Changed from "assume cd succeeded" → "verify with pwd, check output"
+
+**Rationalization Table Validation**:
+The skill's rationalization table accurately predicted and countered both violations:
+- Entry for Scenario 3: "Skip git-spice check, probably initialized" → Skill requires explicit verification
+- Entry for Scenario 8: "No need to verify with pwd" → Skill mandates pwd verification
+
+**Conclusion**: The managing-main-worktrees skill successfully prevents the rationalizations observed in RED phase. No new loopholes discovered in these scenarios.
 
 ---
 
