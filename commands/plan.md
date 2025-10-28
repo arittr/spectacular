@@ -14,14 +14,52 @@ Where `a1b2c3` is the runId and `magic-link-auth` is the feature slug.
 
 ## Workflow
 
-### Step 0: Extract Run ID and Feature Slug from Spec
+### Step 0: Main Worktree Setup
 
-**First action**: Read the spec and extract the RUN_ID from frontmatter and determine the spec directory.
+**First action**: Extract runId from spec path and set up main worktree for plan generation.
 
 ```bash
-# Extract runId from spec frontmatter
-RUN_ID=$(grep "^runId:" {spec-path} | awk '{print $2}')
-echo "RUN_ID: $RUN_ID"
+# Extract runId from spec path pattern: specs/{runId}-{feature}/spec.md
+SPEC_PATH="{spec-path}"
+RUN_ID=$(echo "$SPEC_PATH" | sed -n 's|^.*specs/\([^-]*\)-.*$|\1|p')
+
+if [ -z "$RUN_ID" ]; then
+  echo "ERROR: Could not extract runId from spec path: $SPEC_PATH"
+  echo "Expected format: specs/{runId}-{feature-slug}/spec.md"
+  exit 1
+fi
+
+echo "Extracted RUN_ID: $RUN_ID"
+```
+
+**Announce:** "Setting up main worktree for RUN_ID: {run-id}"
+
+Use the `managing-main-worktrees` skill to set up isolated worktree:
+- Creates `.worktrees/main-{run-id}/` directory
+- Sets up detached HEAD at current commit
+- Provides clean isolation for plan generation
+
+After skill completes:
+
+```bash
+# Change to main worktree directory
+cd .worktrees/main-{run-id}/
+
+# Verify we're in worktree
+pwd
+git branch --show-current  # Should show detached HEAD
+```
+
+**Critical:** All subsequent operations must happen in the main worktree directory.
+
+### Step 0a: Extract Run ID and Feature Slug from Spec
+
+**Second action**: Read the spec and extract additional metadata from frontmatter.
+
+```bash
+# Extract runId from spec frontmatter (verification)
+RUN_ID_VERIFY=$(grep "^runId:" {spec-path} | awk '{print $2}')
+echo "RUN_ID from frontmatter: $RUN_ID_VERIFY"
 
 # Get spec directory (e.g., specs/bdc63b-wikipedia-import/)
 SPEC_DIR=$(dirname {spec-path})
@@ -31,13 +69,8 @@ FEATURE_SLUG=$(basename $SPEC_DIR | sed "s/^${RUN_ID}-//")
 echo "FEATURE_SLUG: $FEATURE_SLUG"
 ```
 
-**If RUN_ID not found:**
-Generate one now (for backwards compatibility with old specs):
-
-```bash
-RUN_ID=$(echo "{feature-name}-$(date +%s)" | shasum -a 256 | head -c 6)
-echo "Generated RUN_ID: $RUN_ID (spec missing runId)"
-```
+**If RUN_ID not found in frontmatter:**
+The path-extracted RUN_ID from Step 0 is still valid (backwards compatibility).
 
 **Spec Directory Pattern:**
 Specs follow the pattern: `specs/{run-id}-{feature-slug}/spec.md`
@@ -118,14 +151,14 @@ Verify:
 
 ### Step 3: Report to User
 
-Provide comprehensive summary:
+Provide comprehensive summary with absolute path from worktree:
 
 ````markdown
 ✅ Execution Plan Generated
 
 **RUN_ID**: {run-id}
 **Feature**: {feature-slug}
-**Location**: specs/{run-id}-{feature-slug}/plan.md
+**Location**: $(pwd)/specs/{run-id}-{feature-slug}/plan.md
 
 ## Plan Summary
 

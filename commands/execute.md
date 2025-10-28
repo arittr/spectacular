@@ -25,25 +25,33 @@ Where `a1b2c3` is the runId and `magic-link-auth` is the feature slug.
 
 ### Step 0a: Extract Run ID from Plan
 
-**First action**: Read the plan and extract the RUN_ID from frontmatter.
+**First action**: Extract RUN_ID from plan path pattern.
 
 ```bash
-# Extract runId from plan frontmatter
-RUN_ID=$(grep "^runId:" {plan-path} | awk '{print $2}')
-echo "RUN_ID: $RUN_ID"
-```
+# Extract runId from plan path pattern: specs/{runId}-{feature}/plan.md
+PLAN_PATH="{plan-path}"
+RUN_ID=$(echo "$PLAN_PATH" | sed -n 's|^.*specs/\([^-]*\)-.*$|\1|p')
 
-**If RUN_ID not found:**
-Generate one now (for backwards compatibility with old plans):
-```bash
-RUN_ID=$(echo "{feature-name}-$(date +%s)" | shasum -a 256 | head -c 6)
-echo "Generated RUN_ID: $RUN_ID (plan missing runId)"
+if [ -z "$RUN_ID" ]; then
+  echo "ERROR: Could not extract runId from plan path: $PLAN_PATH"
+  echo "Expected format: specs/{runId}-{feature-slug}/plan.md"
+  exit 1
+fi
+
+echo "Extracted RUN_ID: $RUN_ID"
+
+# Verify with frontmatter (optional, for backwards compatibility check)
+RUN_ID_VERIFY=$(grep "^runId:" {plan-path} | awk '{print $2}')
+if [ -n "$RUN_ID_VERIFY" ] && [ "$RUN_ID" != "$RUN_ID_VERIFY" ]; then
+  echo "WARNING: Path runId ($RUN_ID) differs from frontmatter ($RUN_ID_VERIFY)"
+fi
 ```
 
 **Store RUN_ID for use in:**
 - Branch naming: `{run-id}-task-X-Y-name`
 - Filtering: `git branch | grep ^{run-id}-`
 - Cleanup: Identify which branches belong to this run
+- Worktree naming: `.worktrees/main-{run-id}/`
 
 **Announce:** "Executing with RUN_ID: {run-id}"
 
@@ -93,7 +101,139 @@ git branch | grep "^  {run-id}-task-"
 - Parallel phases: Resume incomplete tasks only
 
 **If no existing work:**
-- Continue to Step 1 (Read and Parse Plan)
+- Continue to Step 0.5 (Main Worktree Setup)
+
+### Step 0.5: Main Worktree Setup
+
+**Before executing tasks**: Set up main worktree for isolated execution.
+
+**Announce:** "Setting up main worktree for RUN_ID: {run-id}"
+
+Use the `managing-main-worktrees` skill to set up isolated worktree:
+- Creates `.worktrees/main-{run-id}/` directory
+- Sets up detached HEAD at current commit
+- Provides clean isolation for task execution
+
+After skill completes:
+
+```bash
+# Change to main worktree directory
+cd .worktrees/main-{run-id}/
+
+# Verify we're in worktree
+pwd
+git branch --show-current  # Should show detached HEAD
+```
+
+**Store working directory for subagent prompts:**
+```bash
+WORKING_DIR=$(pwd)
+echo "Working directory: $WORKING_DIR"
+```
+
+**Critical:** All subsequent operations must happen in the main worktree directory.
+
+### Step 0.6: Dependency Installation
+
+**Before executing tasks**: Detect and install project dependencies.
+
+**Announce:** "Detecting and installing project dependencies"
+
+**4-Tier Detection Strategy:**
+
+1. **Check CLAUDE.md** (highest priority - explicit instructions):
+   ```bash
+   if grep -qi -E "(install|setup|dependencies|getting started)" CLAUDE.md 2>/dev/null; then
+     echo "Found dependency instructions in CLAUDE.md"
+     # Extract relevant section and follow instructions
+     # Look for code blocks with install commands
+   fi
+   ```
+
+2. **Check Constitution tech-stack.md** (second priority - architectural spec):
+   ```bash
+   if [ -f docs/constitutions/current/tech-stack.md ]; then
+     if grep -qi -E "(install|dependencies|setup)" docs/constitutions/current/tech-stack.md; then
+       echo "Found dependency instructions in constitution"
+       # Extract and follow installation instructions
+     fi
+   fi
+   ```
+
+3. **Detect from lock files** (third priority - inferred from tooling):
+   Check in this order (first match wins):
+
+   ```bash
+   # Node.js ecosystems
+   if [ -f pnpm-lock.yaml ]; then
+     INSTALL_CMD="pnpm install"
+     DETECTED_FROM="pnpm-lock.yaml"
+   elif [ -f package-lock.json ]; then
+     INSTALL_CMD="npm install"
+     DETECTED_FROM="package-lock.json"
+   elif [ -f yarn.lock ]; then
+     INSTALL_CMD="yarn install"
+     DETECTED_FROM="yarn.lock"
+   elif [ -f bun.lockb ]; then
+     INSTALL_CMD="bun install"
+     DETECTED_FROM="bun.lockb"
+   # Rust
+   elif [ -f Cargo.lock ]; then
+     INSTALL_CMD="cargo build"
+     DETECTED_FROM="Cargo.lock"
+   # Python
+   elif [ -f requirements.txt ]; then
+     INSTALL_CMD="pip install -r requirements.txt"
+     DETECTED_FROM="requirements.txt"
+   # Ruby
+   elif [ -f Gemfile.lock ]; then
+     INSTALL_CMD="bundle install"
+     DETECTED_FROM="Gemfile.lock"
+   else
+     INSTALL_CMD=""
+     DETECTED_FROM="none"
+   fi
+   ```
+
+4. **No lock files found** (skip with info message):
+   ```bash
+   if [ "$DETECTED_FROM" = "none" ]; then
+     echo "INFO: No lock files or dependency instructions found"
+     echo "Skipping dependency installation (project may not require it)"
+     # Continue to Step 1
+   fi
+   ```
+
+**Execute installation:**
+
+```bash
+if [ -n "$INSTALL_CMD" ]; then
+  echo "Detected: $INSTALL_CMD (from $DETECTED_FROM)"
+  echo "Running dependency installation..."
+
+  if $INSTALL_CMD; then
+    echo "✅ Dependencies installed successfully"
+  else
+    echo "❌ CRITICAL: Dependency installation failed"
+    echo "Command: $INSTALL_CMD"
+    echo "Cannot proceed with execution - dependencies required"
+    exit 1
+  fi
+fi
+```
+
+**Critical Error Handling:**
+- If install command fails → STOP execution immediately
+- Do NOT continue with broken dependencies
+- Report error with full context (command, exit code, output)
+
+**Log what was detected:**
+```bash
+echo "Dependency detection complete:"
+echo "  Method: $DETECTED_FROM"
+echo "  Command: ${INSTALL_CMD:-none}"
+echo "  Status: ${INSTALL_CMD:+installed}${INSTALL_CMD:-skipped}"
+```
 
 ### Step 1: Read and Parse Plan
 
@@ -130,21 +270,24 @@ For phases where tasks must run in order:
 
    TASK: {task-name}
    CURRENT BRANCH: {current-branch}
+   WORKING_DIR: {working-dir}
 
    CRITICAL - CONTEXT MANAGEMENT:
    You are a subagent with isolated context. Complete this task independently.
 
-   IMPLEMENTATION:
-
-   1. Verify you're on the correct branch:
+   SETUP:
    ```bash
+   cd {working-dir}
+   pwd  # Verify working directory
    git branch --show-current  # Should be {current-branch}
    ```
 
-   2. Read task details from: /Users/drewritter/projects/bignight.party/{plan-path}
+   IMPLEMENTATION:
+
+   1. Read task details from: {plan-path}
       Find: "Task {task-id}: {task-name}"
 
-   3. Implement according to:
+   2. Implement according to:
       - Files specified in task
       - Acceptance criteria in task
       - Project constitution (see @docs/constitutions/current/)
@@ -229,6 +372,16 @@ For phases where tasks are independent:
    ROLE: Setup parallel worktrees for Phase {phase-id}
 
    TASK: Create worktrees for {task-count} parallel tasks
+   WORKING_DIR: {working-dir}
+
+   CRITICAL - WORKING IN MAIN WORKTREE:
+   You are operating from the main worktree. Child worktrees will branch from here.
+
+   SETUP:
+   ```bash
+   cd {working-dir}
+   pwd  # Verify we're in main worktree
+   ```
 
    IMPLEMENTATION:
 
@@ -240,7 +393,7 @@ For phases where tasks are independent:
 
    2. Create worktrees (one per parallel task):
    ```bash
-   # Create .worktrees directory if needed
+   # Create .worktrees directory if needed (relative to main worktree)
    mkdir -p .worktrees
 
    # For each parallel task, create a worktree (namespaced by RUN_ID)
