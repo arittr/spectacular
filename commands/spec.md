@@ -39,6 +39,124 @@ echo "RUN_ID: $RUN_ID"
 
 **Announce:** "Generated RUN_ID: {run-id} for tracking this spec run"
 
+### Step 0.5: Handle Uncommitted Changes and Setup Worktree
+
+**CRITICAL**: Before creating the worktree, handle uncommitted changes in the main repository.
+
+#### Check for Uncommitted Changes
+
+```bash
+git status --porcelain
+```
+
+**If output is empty**: No uncommitted changes, proceed directly to worktree setup.
+
+**If output is non-empty**: Uncommitted changes exist. Present options to user.
+
+#### Present Options (When Uncommitted Changes Exist)
+
+Use AskUserQuestion tool to present 4 options:
+
+**Option 1: Commit and proceed**
+- **What happens**: All uncommitted changes will be committed with message "WIP: Spectacular spec creation"
+- **Consequence**: Changes will be included in the worktree
+- **When to choose**: You want these changes tracked in version control and available in the worktree
+
+**Option 2: Stash and proceed**
+- **What happens**: All uncommitted changes will be stashed with message "Spectacular: {feature-slug}"
+- **Consequence**: Changes will be saved but NOT included in the worktree. You can retrieve them later with `git stash pop`
+- **When to choose**: These changes are unrelated to the spec and you want a clean worktree
+
+**Option 3: Proceed anyway**
+- **What happens**: Worktree will be created from current HEAD
+- **Consequence**: Uncommitted changes stay in main repo only (NOT in worktree). They won't interfere with spec creation.
+- **When to choose**: You understand the isolation and want to keep changes separate
+
+**Option 4: Abort**
+- **What happens**: Command exits cleanly
+- **Consequence**: You'll need to manually handle changes (commit/stash/discard) and re-run the command
+- **When to choose**: You want to handle changes yourself first
+
+#### Execute User Choice
+
+**If user selects Option 1 (Commit and proceed):**
+
+```bash
+git add --all
+git commit -m "WIP: Spectacular spec creation"
+```
+
+**On commit success:**
+- Announce: "Committed changes. Worktree will include these changes."
+- Proceed to worktree setup
+
+**On commit failure** (e.g., pre-commit hook fails):
+- Display full error output (including hook output)
+- Explain: "Pre-commit hook failed. You can fix the issues and retry, or abort to handle manually."
+- Use AskUserQuestion with 2 options:
+  - Retry commit (re-run `git commit` after user fixes)
+  - Abort (exit cleanly)
+- **Recovery instructions**: "Fix the pre-commit hook errors in your files, then re-run `/spectacular:spec {feature-description}`"
+
+**If user selects Option 2 (Stash and proceed):**
+
+```bash
+git stash push -m "Spectacular: {feature-slug}"
+```
+
+**On stash success:**
+- Capture stash reference from output (e.g., "stash@{0}")
+- Announce: "Stashed changes as {stash-reference}. Retrieve later with `git stash pop`"
+- Proceed to worktree setup
+
+**On stash failure**:
+- Display error output
+- Explain: "Stash failed. You can proceed anyway (changes stay in main repo) or abort to handle manually."
+- Use AskUserQuestion with 2 options:
+  - Proceed anyway (equivalent to original Option 3)
+  - Abort (exit cleanly)
+- **Recovery instructions**: "Manually stash with `git stash` or commit changes, then re-run `/spectacular:spec {feature-description}`"
+
+**If user selects Option 3 (Proceed anyway):**
+- Announce: "Proceeding with uncommitted changes in main repo. Worktree will be clean (from HEAD)."
+- Proceed to worktree setup
+
+**If user selects Option 4 (Abort):**
+- Announce: "Aborting spec creation. Handle uncommitted changes manually (commit/stash/discard), then re-run the command."
+- EXIT - do not proceed
+
+#### Worktree Setup
+
+**After uncommitted changes are handled (or if none existed):**
+
+**Announce:** "I'm using managing-main-worktrees to set up the worktree environment."
+
+Use the `managing-main-worktrees` skill to create or verify the main worktree:
+
+**Parameters:**
+- RUN_ID: {run-id from Step 0}
+- Worktree path: `.worktrees/main-{run-id}/`
+- Action: Create or verify
+
+**The skill will:**
+1. Prune stale worktree references
+2. Check if worktree exists
+3. If exists: verify accessibility
+4. If not exists: create with `git worktree add --detach`
+5. Verify git-spice initialization
+6. Report absolute path
+
+**After skill completes:**
+
+```bash
+cd .worktrees/main-{run-id}
+pwd  # Verify we're in the worktree
+```
+
+**Verify output contains** `main-{run-id}` to confirm directory change succeeded.
+
+**All remaining steps (1-4) will execute in this worktree.**
+
 ### Step 1: Brainstorm Requirements
 
 **Announce:** "I'm brainstorming the design using Phases 1-3 (Understanding, Exploration, Design Presentation)."
@@ -199,21 +317,31 @@ Options:
 
 ### Step 4: Report Completion
 
-After validation passes OR clarifications documented, report to user:
+After validation passes OR clarifications documented, report to user.
+
+**First, get absolute path of worktree:**
+
+```bash
+cd .worktrees/main-{run-id}
+pwd
+```
+
+Capture the full absolute path (e.g., `/Users/username/projects/myapp/.worktrees/main-{run-id}`)
 
 **If validation passed:**
 ```
 ✅ Feature Specification Complete & Validated
 
 RUN_ID: {run-id}
-Location: specs/{run-id}-{feature-slug}/spec.md
+Worktree: {absolute-path-from-pwd}
+Location: {absolute-path-from-pwd}/specs/{run-id}-{feature-slug}/spec.md
 Constitution Compliance: ✓
 Architecture Quality: ✓
 Requirements Quality: ✓
 
 Next Steps:
-1. Review the spec: specs/{run-id}-{feature-slug}/spec.md
-2. Create implementation plan: /spectacular:plan @specs/{run-id}-{feature-slug}/spec.md
+1. Review the spec: {absolute-path-from-pwd}/specs/{run-id}-{feature-slug}/spec.md
+2. Create implementation plan: /spectacular:plan @{absolute-path-from-pwd}/specs/{run-id}-{feature-slug}/spec.md
 ```
 
 **If clarifications needed:**
@@ -221,12 +349,13 @@ Next Steps:
 ⚠️  Feature Specification Complete - Clarifications Needed
 
 RUN_ID: {run-id}
-Location: specs/{run-id}-{feature-slug}/spec.md
-Clarifications: specs/{run-id}-{feature-slug}/clarifications.md
+Worktree: {absolute-path-from-pwd}
+Location: {absolute-path-from-pwd}/specs/{run-id}-{feature-slug}/spec.md
+Clarifications: {absolute-path-from-pwd}/specs/{run-id}-{feature-slug}/clarifications.md
 
 Next Steps:
-1. Review spec: specs/{run-id}-{feature-slug}/spec.md
-2. Answer clarifications: specs/{run-id}-{feature-slug}/clarifications.md
+1. Review spec: {absolute-path-from-pwd}/specs/{run-id}-{feature-slug}/spec.md
+2. Answer clarifications: {absolute-path-from-pwd}/specs/{run-id}-{feature-slug}/clarifications.md
 3. Once resolved, re-run: /spectacular:spec {feature-description}
 ```
 
