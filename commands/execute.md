@@ -133,6 +133,21 @@ Verify plan structure:
 - ✅ All tasks have acceptance criteria
 - ✅ Dependencies make sense
 
+### Step 1.5: Read Constitution Once
+
+**Before spawning subagents, read the constitution files once to pass to all subagents.**
+
+This avoids every subagent reading the same files, significantly reducing file I/O and context bloat.
+
+```bash
+# Read constitution files in the worktree
+ARCH=$(cat docs/constitutions/current/architecture.md)
+PATTERNS=$(cat docs/constitutions/current/patterns.md)
+TECH_STACK=$(cat docs/constitutions/current/tech-stack.md)
+```
+
+**Store these in memory to pass to each subagent prompt below.**
+
 ### Step 2: Execute Phases
 
 **If resuming:** Start from the incomplete phase/task identified in Step 0.
@@ -176,7 +191,23 @@ For phases where tasks must run in order:
    3. Implement according to:
       - Files specified in task
       - Acceptance criteria in task
-      - Project constitution (see @docs/constitutions/current/)
+      - Project constitution (provided below)
+
+   **PROJECT CONSTITUTION:**
+
+   The following constitution rules must be followed for all implementation:
+
+   <architecture>
+   {ARCH content from Step 1.5}
+   </architecture>
+
+   <patterns>
+   {PATTERNS content from Step 1.5}
+   </patterns>
+
+   <tech-stack>
+   {TECH_STACK content from Step 1.5}
+   </tech-stack>
 
    4. Quality checks (MUST run all):
    ```bash
@@ -338,7 +369,23 @@ For phases where tasks are independent:
    2. Implement according to:
       - Files specified in task
       - Acceptance criteria in task
-      - Project constitution (see @docs/constitutions/current/)
+      - Project constitution (provided below)
+
+   **PROJECT CONSTITUTION:**
+
+   The following constitution rules must be followed for all implementation:
+
+   <architecture>
+   {ARCH content from Step 1.5}
+   </architecture>
+
+   <patterns>
+   {PATTERNS content from Step 1.5}
+   </patterns>
+
+   <tech-stack>
+   {TECH_STACK content from Step 1.5}
+   </tech-stack>
 
    3. Quality checks (MUST run all):
    ```bash
