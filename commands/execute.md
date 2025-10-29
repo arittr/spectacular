@@ -36,7 +36,8 @@ echo "RUN_ID: $RUN_ID"
 **If RUN_ID not found:**
 Generate one now (for backwards compatibility with old plans):
 ```bash
-RUN_ID=$(echo "{feature-name}-$(date +%s)" | shasum -a 256 | head -c 6)
+TIMESTAMP=$(date +%s)
+RUN_ID=$(echo "{feature-name}-$TIMESTAMP" | shasum -a 256 | head -c 6)
 echo "Generated RUN_ID: $RUN_ID (plan missing runId)"
 ```
 
