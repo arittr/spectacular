@@ -47,9 +47,38 @@ spectacular/
 3. **`/spectacular:plan`** → Decomposes spec into execution plan with automatic phase grouping
 4. **`/spectacular:execute`** → Orchestrates parallel/sequential implementation with git worktrees
 
+## Using Spectacular in Your Project
+
+### Defining Quality Check Commands
+
+Spectacular's `/spectacular:execute` command runs project-specific quality checks after each task. Define these commands in your project's CLAUDE.md:
+
+```markdown
 ## Development Commands
 
-### Testing & Validation
+### Quality Checks
+
+- **test**: `npm test` (or `pytest`, `go test`, `cargo test`)
+- **lint**: `npm run lint` (or `ruff check .`, `golangci-lint run`)
+- **format**: `npm run format` (or `black .`, `go fmt`, `cargo fmt`)
+- **build**: `npm run build` (or `python -m build`, `go build`, `cargo build`)
+```
+
+**Detection order:**
+1. CLAUDE.md "## Development Commands" section
+2. Constitution `testing.md` (if using spectacular's constitution pattern)
+3. Common patterns (package.json scripts, pytest.ini, Makefile, etc.)
+
+**If not defined:** Quality checks are skipped with warning to user.
+
+**Why define these:**
+- Ensures code quality after each task in execution flow
+- Project-agnostic (works with any language/toolchain)
+- Automatic verification before completion
+
+## Development Commands
+
+### Testing & Validation (Spectacular Plugin)
 
 This repository has **no traditional test/build commands** - it's pure markdown documentation for Claude Code.
 
