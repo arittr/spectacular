@@ -39,7 +39,36 @@ echo "RUN_ID: $RUN_ID"
 
 **Announce:** "Generated RUN_ID: {run-id} for tracking this spec run"
 
+### Step 0.5: Create Isolated Worktree
+
+**Announce:** "Creating isolated worktree for this spec run..."
+
+**Create worktree for isolated development:**
+
+1. **Create branch using git-spice**:
+   - Use `using-git-spice` skill to create branch `{runId}-main` from current branch
+   - Branch name format: `{runId}-main` (e.g., `abc123-main`)
+
+2. **Create worktree**:
+   ```bash
+   # Create worktree at .worktrees/{runId}-main/
+   git worktree add .worktrees/${RUN_ID}-main ${RUN_ID}-main
+   ```
+
+3. **Error handling**:
+   - If worktree already exists: "Worktree {runId}-main already exists. Remove it first with `git worktree remove .worktrees/{runId}-main` or use a different feature name."
+   - If worktree creation fails: Report the git error details and exit
+
+**Working directory context:**
+- All subsequent file operations happen in `.worktrees/{runId}-main/`
+- Brainstorming and spec generation occur in the worktree context
+- Main repository working directory remains unchanged
+
+**Announce:** "Worktree created at .worktrees/{runId}-main/ - all work will happen in isolation"
+
 ### Step 1: Brainstorm Requirements
+
+**Context:** All brainstorming happens in the context of the worktree (`.worktrees/{runId}-main/`)
 
 **Announce:** "I'm brainstorming the design using Phases 1-3 (Understanding, Exploration, Design Presentation)."
 
@@ -57,7 +86,7 @@ Brainstorming for Spec:
 
 **Goal:** Clarify scope, constraints, and success criteria.
 
-1. Check current project state in working directory
+1. Check current project state in working directory (note: we're in the worktree)
 2. Read @docs/constitutions/current/ to understand constraints:
    - architecture.md - Layer boundaries
    - patterns.md - Mandatory patterns
@@ -106,7 +135,7 @@ Use the `writing-specs` skill to generate the spec document.
 - Feature: {feature-description}
 - Design context: {summary from brainstorming}
 - RUN_ID: {run-id from Step 0}
-- Output location: `specs/{run-id}-{feature-slug}/spec.md`
+- Output location: `.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md`
 - **Constitution**: All design decisions must follow @docs/constitutions/current/
 - Analyze codebase for task-specific context:
   - Existing files to modify
@@ -128,6 +157,18 @@ created: {date}
 status: draft
 ---
 ```
+
+### Step 2.5: Commit Spec to Worktree
+
+**After spec generation completes, commit the spec to the worktree branch:**
+
+```bash
+cd .worktrees/${RUN_ID}-main
+git add specs/
+git commit -m "spec: add ${feature-slug} specification [${RUN_ID}]"
+```
+
+**Announce:** "Spec committed to {runId}-main branch in worktree"
 
 ### Step 3: Architecture Quality Validation
 
@@ -177,7 +218,7 @@ Read the generated spec and check against these dimensions:
 
 #### 3.5 Surface Issues
 
-If ANY checks fail, create `specs/{run-id}-{feature-slug}/clarifications.md` with:
+If ANY checks fail, create `.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/clarifications.md` with:
 
 ```markdown
 # Clarifications Needed
@@ -206,14 +247,19 @@ After validation passes OR clarifications documented, report to user:
 ✅ Feature Specification Complete & Validated
 
 RUN_ID: {run-id}
-Location: specs/{run-id}-{feature-slug}/spec.md
+Worktree: .worktrees/{run-id}-main/
+Branch: {run-id}-main
+Location: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
+
 Constitution Compliance: ✓
 Architecture Quality: ✓
 Requirements Quality: ✓
 
+Note: Spec is in isolated worktree, main repo unchanged.
+
 Next Steps:
-1. Review the spec: specs/{run-id}-{feature-slug}/spec.md
-2. Create implementation plan: /spectacular:plan @specs/{run-id}-{feature-slug}/spec.md
+1. Review the spec: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
+2. Create implementation plan: /spectacular:plan @.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
 ```
 
 **If clarifications needed:**
@@ -221,12 +267,16 @@ Next Steps:
 ⚠️  Feature Specification Complete - Clarifications Needed
 
 RUN_ID: {run-id}
-Location: specs/{run-id}-{feature-slug}/spec.md
-Clarifications: specs/{run-id}-{feature-slug}/clarifications.md
+Worktree: .worktrees/{run-id}-main/
+Branch: {run-id}-main
+Location: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
+Clarifications: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/clarifications.md
+
+Note: Spec is in isolated worktree, main repo unchanged.
 
 Next Steps:
-1. Review spec: specs/{run-id}-{feature-slug}/spec.md
-2. Answer clarifications: specs/{run-id}-{feature-slug}/clarifications.md
+1. Review spec: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
+2. Answer clarifications: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/clarifications.md
 3. Once resolved, re-run: /spectacular:spec {feature-description}
 ```
 
