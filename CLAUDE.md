@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Spectacular** is a Claude Code plugin that enables spec-anchored development with automatic parallel task execution. It extends the [superpowers](https://github.com/obra/superpowers) plugin with commands and skills for feature specification, task decomposition, and parallel execution via git worktrees and git-spice stacked branches.
 
 **Core Philosophy:**
+
 - **Spec anchoring**: Every line of code traces back to spec + constitution
 - **Automatic parallelization**: Independent tasks run simultaneously via git worktrees
 - **Reviewable PRs**: Auto-stacked branches keep changes small and focused
@@ -53,6 +54,7 @@ spectacular/
 This repository has **no traditional test/build commands** - it's pure markdown documentation for Claude Code.
 
 **Validation approach:**
+
 - Manual testing by invoking commands in a test repository
 - Skills can be tested using the `testing-skills-with-subagents` skill from superpowers
 - Changes should be validated by running the actual workflow in a sample project
@@ -60,6 +62,7 @@ This repository has **no traditional test/build commands** - it's pure markdown 
 ### Plugin Development
 
 **Installing locally for development:**
+
 ```bash
 # Link to local plugins directory
 ln -s /path/to/spectacular ~/.claude/plugins/cache/spectacular
@@ -69,38 +72,43 @@ cp -r . ~/.claude/plugins/cache/spectacular
 ```
 
 **Reloading changes:**
+
 - Claude Code reads plugin files on-demand
 - Command/skill changes take effect immediately (no restart needed)
 - Plugin metadata changes (plugin.json) may require restart
 
 ### Version Management
 
-**Release (bump + push):**
+**IMPORTANT:** Always use `./scripts/update-version.sh` to bump versions. Never edit version numbers manually in `.claude-plugin/plugin.json` or `.claude-plugin/marketplace.json`.
+
+**Bump version when creating new branches:**
+
 ```bash
-pnpm release:patch    # 1.1.0 → 1.1.1 + push
-pnpm release:minor    # 1.1.0 → 1.2.0 + push
-pnpm release:major    # 1.1.0 → 2.0.0 + push
+./scripts/update-version.sh 2.0.0-alpha22    # Specify exact version
 ```
 
-**Just bump (no push):**
-```bash
-pnpm version patch    # 1.1.0 → 1.1.1
-pnpm version minor    # 1.1.0 → 1.2.0
-pnpm version major    # 1.1.0 → 2.0.0
-```
+**Typical version progression:**
+- Bug fixes, minor changes: `2.0.0-alpha21` → `2.0.0-alpha22`
+- New features (pre-release): `2.0.0-alpha22` → `2.0.0-beta1`
+- Stable releases: `2.0.0-beta1` → `2.0.0`
 
 **What happens automatically:**
-1. Updates `package.json` version
-2. Runs `scripts/sync-version.js` to sync to `.claude-plugin/*.json`
-3. Creates git commit with version bump
-4. Creates git tag (e.g., `v1.1.1`)
-5. Pushes to remote (if using `release:*` scripts)
+
+1. Updates `.claude-plugin/plugin.json` version
+2. Updates `.claude-plugin/marketplace.json` version
+3. Ensures consistency across both files
+
+**Why mandatory:**
+- Manual edits can cause version drift between files
+- Script ensures semver format is valid
+- Maintains version consistency for plugin loading
 
 ## Key Concepts
 
 ### Specifications vs Plans
 
 - **Specification** (`spec.md`): Defines WHAT to build and WHY
+
   - Requirements, architecture, acceptance criteria
   - References constitutions, links to external docs
   - NO implementation steps or task breakdown
@@ -129,11 +137,13 @@ Constitutions are **versioned** (v1/, v2/, etc.) with a `current/` symlink point
 Tasks should be **PR-sized, thematically coherent units** - not mechanical file-by-file splits.
 
 **Good chunking:**
+
 - M (3-5h): Sweet spot - complete subsystem, layer, or feature slice
 - L (5-7h): Complex coherent units (full UI layer, complete API surface)
 - S (1-2h): Rare - only truly standalone work
 
 **Avoid:**
+
 - XL tasks (>8h): Always split into M/L tasks
 - Too many S tasks (>30%): Bundle related work into M tasks
 - Mechanical splits: Schema + migration + dependencies should be ONE task ("Database Foundation")
@@ -185,6 +195,7 @@ description: One-line description shown to users
 ```
 
 **Key principles:**
+
 - Commands orchestrate workflows but delegate actual work to skills
 - Use clear step-by-step instructions
 - Include error handling and recovery steps
@@ -203,21 +214,26 @@ description: When to use this skill
 # Skill Title
 
 ## When to Use
+
 {Trigger conditions}
 
 **Announce:** "I'm using {skill-name} to {purpose}."
 
 ## The Process
+
 {Step-by-step workflow}
 
 ## Quality Rules
+
 {Standards and validation}
 
 ## Error Handling
+
 {Common failures and recovery}
 ```
 
 **Key principles:**
+
 - Skills are process documentation, not code
 - Follow RED-GREEN-REFACTOR: Assume Claude will rationalize away rules
 - Include "Rationalization Table" for predictable shortcuts
@@ -236,6 +252,7 @@ When editing commands/skills:
 ## Dependencies
 
 **Required:**
+
 - [superpowers](https://github.com/obra/superpowers) plugin - Core skills library (TDD, debugging, code review)
 - [git-spice](https://github.com/abhinav/git-spice) - Stacked branch management
 - Git repository - All workflows assume git
@@ -293,18 +310,21 @@ Spectacular **extends** superpowers, not replaces it. Key superpowers skills use
 ## Anti-Patterns to Avoid
 
 ### In Specs
+
 - ❌ Duplicating constitution rules (reference them instead)
 - ❌ Including code examples from libraries (link to docs)
 - ❌ Creating implementation plans (use `/spectacular:plan`)
 - ❌ Adding success metrics or timelines (those are product docs)
 
 ### In Plans
+
 - ❌ XL tasks (>8h) - always split into M/L
 - ❌ Too many S tasks (>30%) - bundle into thematic M tasks
 - ❌ Wildcard file patterns (`src/**/*.ts`) - use explicit paths
 - ❌ Circular dependencies - review task organization
 
 ### In Execution
+
 - ❌ Orchestrator running git commands directly (delegate to subagents)
 - ❌ Creating empty "feature branch" upfront (stack IS the feature)
 - ❌ Parallel tasks forgetting to detach HEAD (breaks worktree cleanup)
@@ -313,21 +333,25 @@ Spectacular **extends** superpowers, not replaces it. Key superpowers skills use
 ## Troubleshooting
 
 ### Command Not Found
+
 - Verify file is in `commands/` directory
 - Check YAML frontmatter has `description` field
 - Restart Claude Code if plugin.json was changed
 
 ### Skill Not Loading
+
 - Verify file is at `skills/{name}/SKILL.md`
 - Check YAML frontmatter has `name` and `description`
 - Use Skill tool with exact skill name
 
 ### Worktree Creation Fails
+
 - Check `.worktrees/` is in `.gitignore`
 - Run `git worktree prune` to clean stale entries
 - Verify working directory is clean
 
 ### Git-Spice Errors
+
 - Run `gs repo init` to initialize repository
 - Check `gs ls` to view current stack
 - See `using-git-spice` skill for troubleshooting
