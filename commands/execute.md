@@ -173,6 +173,8 @@ If not found, quality checks will be skipped with warning to user.
 
 For each phase in the plan, execute based on strategy:
 
+**IMPORTANT:** After each phase completes, MUST run code review using `requesting-code-review` skill before proceeding to next phase.
+
 #### Sequential Phase Strategy
 
 For phases where tasks must run in order:
@@ -305,17 +307,31 @@ For phases where tasks must run in order:
 
 2. After ALL tasks in phase complete:
 
-   **Use `requesting-code-review` skill:**
+   **MANDATORY: Use `requesting-code-review` skill to dispatch code review subagent:**
 
-   Dispatch code-reviewer subagent to review the entire phase:
-   - All task branches in this phase
-   - Verify patterns followed
+   **Announce:** "Phase {phase-id} complete. Using requesting-code-review skill to validate implementation."
+
+   Use the Skill tool to invoke the `requesting-code-review` skill:
+
+   ```
+   Skill tool: requesting-code-review
+   ```
+
+   The code-reviewer subagent will:
+   - Review all task branches in this phase
+   - Verify constitution patterns followed
    - Check acceptance criteria met
-   - Review quality and consistency
+   - Validate code quality and consistency
+   - Report issues or approve
 
-3. Address review feedback if needed
+3. Address review feedback if needed:
+   - If reviewer reports issues, fix them before proceeding
+   - Re-run code review after fixes
+   - Do NOT proceed to next phase until review passes
 
-4. Phase is complete when code review passes
+4. Phase is complete ONLY when code review passes
+
+   **Evidence required:** Code review approval message from requesting-code-review skill
 
 #### Parallel Phase Strategy
 
@@ -631,18 +647,33 @@ For phases where tasks are independent:
    - Any issues encountered
    ```
 
-6. **After cleanup and linear stacking, use `requesting-code-review` skill:**
+6. **MANDATORY: Use `requesting-code-review` skill to dispatch code review subagent:**
 
-   Dispatch code-reviewer subagent to review the entire phase:
-   - All task branches in this phase
-   - Check for integration issues
-   - Verify patterns followed
-   - Ensure no file conflicts
-   - Review quality and consistency
+   **Announce:** "Phase {phase-id} complete (parallel). Using requesting-code-review skill to validate implementation."
 
-7. **Address review feedback if needed**
+   Use the Skill tool to invoke the `requesting-code-review` skill:
 
-8. Phase is complete when code review passes, cleanup verified, and linear stack confirmed
+   ```
+   Skill tool: requesting-code-review
+   ```
+
+   The code-reviewer subagent will:
+   - Review all task branches in this phase
+   - Check for integration issues between parallel tasks
+   - Verify constitution patterns followed
+   - Ensure no file conflicts or merge issues
+   - Validate code quality and consistency
+   - Report issues or approve
+
+7. **Address review feedback if needed:**
+   - If reviewer reports issues, fix them before proceeding
+   - Re-run code review after fixes
+   - Do NOT proceed to next phase until review passes
+
+8. Phase is complete ONLY when:
+   - Code review passes (evidence from requesting-code-review skill)
+   - Cleanup verified (all worktrees removed)
+   - Linear stack confirmed (gs log short shows correct structure)
 
 ### Step 3: Verify Completion
 
