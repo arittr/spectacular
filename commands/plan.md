@@ -23,11 +23,12 @@ Where `a1b2c3` is the runId and `magic-link-auth` is the feature slug.
 RUN_ID=$(grep "^runId:" {spec-path} | awk '{print $2}')
 echo "RUN_ID: $RUN_ID"
 
-# Get spec directory (e.g., specs/bdc63b-wikipedia-import/)
-SPEC_DIR=$(dirname {spec-path})
-
-# Extract feature slug from directory name pattern: {run-id}-{feature-slug}
-FEATURE_SLUG=$(basename $SPEC_DIR | sed "s/^${RUN_ID}-//")
+# Extract feature slug from the spec path
+# Path pattern: .../specs/{runId}-{feature-slug}/spec.md
+# Get parent directory name and remove runId prefix
+SPEC_PATH="{spec-path}"
+DIR_NAME=$(echo "$SPEC_PATH" | awk -F/ '{print $(NF-1)}')
+FEATURE_SLUG=$(echo "$DIR_NAME" | sed "s/^${RUN_ID}-//")
 echo "FEATURE_SLUG: $FEATURE_SLUG"
 ```
 
@@ -35,7 +36,9 @@ echo "FEATURE_SLUG: $FEATURE_SLUG"
 Generate one now (for backwards compatibility with old specs):
 
 ```bash
-RUN_ID=$(echo "{feature-name}-$(date +%s)" | shasum -a 256 | head -c 6)
+# Generate timestamp-based hash for unique ID
+TIMESTAMP=$(date +%s)
+RUN_ID=$(echo "{feature-name}-$TIMESTAMP" | shasum -a 256 | head -c 6)
 echo "Generated RUN_ID: $RUN_ID (spec missing runId)"
 ```
 
