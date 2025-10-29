@@ -336,28 +336,35 @@ For phases where tasks are independent:
 
    TASK: Create worktrees for {task-count} parallel tasks
 
-   BASE: You are in .worktrees/{run-id}-main worktree, branching from {run-id}-main branch
+   BASE: Creating worktrees that branch from {run-id}-main
 
    IMPLEMENTATION:
 
-   1. Get current branch (should be {run-id}-main or a task branch stacked on it):
+   1. Switch to {run-id}-main worktree and get base branch:
    ```bash
+   # Get absolute repo root
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+
+   # Switch to the main worktree for this run
+   cd "$REPO_ROOT/.worktrees/{run-id}-main"
+
+   # Get current branch (should be {run-id}-main or a task branch stacked on it)
    CURRENT_BRANCH=$(git branch --show-current)
    echo "Base branch: $CURRENT_BRANCH"
    ```
 
-   2. Create worktrees (one per parallel task, branching from {run-id}-main):
+   2. Create worktrees using absolute paths (one per parallel task):
    ```bash
-   # Worktrees are created relative to parent repo's .worktrees/ directory
-   # Each parallel task branches from {run-id}-main
+   # Each parallel task gets its own worktree branching from current branch
+   # Use absolute paths to avoid issues with working directory
 
    # For each parallel task, create a worktree (namespaced by RUN_ID)
-   git worktree add --detach ../../.worktrees/{run-id}-task-{task-id-1} $CURRENT_BRANCH
-   git worktree add --detach ../../.worktrees/{run-id}-task-{task-id-2} $CURRENT_BRANCH
+   git worktree add --detach "$REPO_ROOT/.worktrees/{run-id}-task-{task-id-1}" "$CURRENT_BRANCH"
+   git worktree add --detach "$REPO_ROOT/.worktrees/{run-id}-task-{task-id-2}" "$CURRENT_BRANCH"
    # ... etc for each parallel task
-
-   # Note: Path is relative to .worktrees/{run-id}-main/ working directory
    ```
+
+   **IMPORTANT**: Execute the entire block as a single multi-line Bash tool call.
 
    3. Verify worktrees created:
    ```bash
@@ -370,47 +377,58 @@ For phases where tasks are independent:
    - Confirmation all worktrees are ready
    ```
 
-   Store worktree info for later cleanup:
-   ```javascript
-   taskWorktrees = {
-     '{run-id}-task-3-1': {path: './.worktrees/{run-id}-task-3-1', baseBranch: '{run-id}-main'},
-     '{run-id}-task-3-2': {path: './.worktrees/{run-id}-task-3-2', baseBranch: '{run-id}-main'}
-   }
+   Store worktree info for later cleanup (for orchestrator reference):
+   ```
+   Worktrees created for Phase {phase-id}:
+   - .worktrees/{run-id}-task-{task-id-1} (base: {run-id}-main)
+   - .worktrees/{run-id}-task-{task-id-2} (base: {run-id}-main)
    ```
 
-   Note: All parallel tasks branch from `{run-id}-main` (or current task branch if in sequential phase).
-   Note: `.worktrees/` is gitignored to prevent contamination.
+   Notes:
+   - All parallel tasks branch from `{run-id}-main` (or current task branch if stacking)
+   - `.worktrees/` is gitignored to prevent contamination
+   - Paths are relative to repo root; subagents use absolute paths via REPO_ROOT
 
 3. **Spawn parallel agents** (CRITICAL: Single message with multiple Task tools):
 
    For each task, spawn agent with this prompt:
 
    ```
-   ROLE: You are implementing Task {task-id}.
+   ROLE: You are implementing Task {task-id} in an isolated worktree.
 
    TASK: {task-name}
-   WORKTREE: {worktree-path}
+   WORKTREE: .worktrees/{run-id}-task-{task-id}
    BASE BRANCH: {base-branch}
 
    CRITICAL - WORKTREE ISOLATION:
    You are working in an isolated git worktree. This means:
-   - You have your own working directory: {worktree-path}
+   - You have your own working directory separate from other parallel tasks
    - Other parallel tasks cannot interfere with your files
-   - You must cd into your worktree before starting
+   - You MUST cd into your worktree FIRST before any operations
    - You are branching from {run-id}-main, not the main repo's branch
-   - When done, report completion and do NOT clean up worktree
+   - When done, report completion and do NOT clean up worktree (orchestrator handles cleanup)
 
-   SETUP:
+   SETUP (MANDATORY FIRST STEP):
    ```bash
-   cd {worktree-path}
+   # Get absolute repo root
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+
+   # Switch to your worktree using absolute path
+   cd "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}"
+
+   # Verify you're in the correct worktree
+   pwd  # Should show .worktrees/{run-id}-task-{task-id}
    git branch --show-current  # Should be {base-branch} (likely {run-id}-main)
-   pwd  # Confirm you're in worktree directory
    ```
+
+   **IMPORTANT**: Execute this setup block BEFORE reading the plan or implementing anything.
 
    IMPLEMENTATION:
 
-   1. Read plan from: {plan-path}
+   1. Read plan from: specs/{run-id}-{feature-slug}/plan.md
       Find: "Task {task-id}: {task-name}"
+
+      Note: The plan exists in your worktree because it was branched from {run-id}-main.
 
    2. Implement according to:
       - Files specified in task
@@ -531,14 +549,18 @@ For phases where tasks are independent:
    TASK: Clean up worktrees for Phase {phase-id} and verify git-spice stack
 
    WORKTREES TO CLEAN:
-   - ./.worktrees/{run-id}-task-{task-id-1} (branch: {run-id}-task-{task-id-1}-{short-name})
-   - ./.worktrees/{run-id}-task-{task-id-2} (branch: {run-id}-task-{task-id-2}-{short-name})
-   # ... etc
+   - .worktrees/{run-id}-task-{task-id-1} (branch: {run-id}-task-{task-id-1}-{short-name})
+   - .worktrees/{run-id}-task-{task-id-2} (branch: {run-id}-task-{task-id-2}-{short-name})
+   # ... etc (relative to repo root)
 
    IMPLEMENTATION:
 
-   1. Verify all branches exist and are accessible:
+   1. Get repo root and verify all branches exist:
    ```bash
+   # Get absolute repo root
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+
+   # Verify all task branches exist and are accessible
    git branch -v | grep "{run-id}-task-{task-id-1}"
    git branch -v | grep "{run-id}-task-{task-id-2}"
    # Should see all task branches listed
@@ -550,10 +572,10 @@ For phases where tasks are independent:
    # All worktrees should show (detached HEAD) not a branch name
    ```
 
-   3. Remove all worktrees:
+   3. Remove all worktrees using absolute paths:
    ```bash
-   git worktree remove ./.worktrees/{run-id}-task-{task-id-1}
-   git worktree remove ./.worktrees/{run-id}-task-{task-id-2}
+   git worktree remove "$REPO_ROOT/.worktrees/{run-id}-task-{task-id-1}"
+   git worktree remove "$REPO_ROOT/.worktrees/{run-id}-task-{task-id-2}"
    # ... etc
    ```
 
