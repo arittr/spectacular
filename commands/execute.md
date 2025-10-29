@@ -135,9 +135,9 @@ Verify plan structure:
 - ✅ All tasks have acceptance criteria
 - ✅ Dependencies make sense
 
-### Step 1.5: Read Constitution Once
+### Step 1.5: Read Constitution and Detect Project Commands
 
-**Before spawning subagents, read the constitution files once to pass to all subagents.**
+**Before spawning subagents, read the constitution files once and detect project-specific quality check commands.**
 
 This avoids every subagent reading the same files, significantly reducing file I/O and context bloat.
 
@@ -148,7 +148,24 @@ PATTERNS=$(cat docs/constitutions/current/patterns.md)
 TECH_STACK=$(cat docs/constitutions/current/tech-stack.md)
 ```
 
-**Store these in memory to pass to each subagent prompt below.**
+**Detect project-specific quality check commands:**
+
+Check for commands in CLAUDE.md, constitution/testing.md, or common project patterns:
+
+- **TypeScript/JavaScript**: Check `package.json` for `test`, `lint`, `format`, `build` scripts
+- **Python**: Look for `pytest`, `ruff`, `black`, `mypy`
+- **Go**: Use `go test`, `golangci-lint run`, `go fmt`
+- **Rust**: Use `cargo test`, `cargo clippy`, `cargo fmt`
+
+If CLAUDE.md has "## Development Commands" section with `test`, `lint`, `format`, `build` defined, use those.
+
+If not found, quality checks will be skipped with warning to user.
+
+**Store as variables for use in subagent prompts:**
+- `TEST_CMD` - Command to run tests (e.g., "npm test", "pytest", "go test")
+- `LINT_CMD` - Command to run linting (e.g., "npm run lint", "ruff check .")
+- `FORMAT_CMD` - Command to format code (e.g., "npm run format", "black .")
+- `BUILD_CMD` - Command to build project (e.g., "npm run build", "go build")
 
 ### Step 2: Execute Phases
 
@@ -211,10 +228,17 @@ For phases where tasks must run in order:
    {TECH_STACK content from Step 1.5}
    </tech-stack>
 
-   4. Quality checks (MUST run all):
+   4. Quality checks (run if commands detected):
    ```bash
-   pnpm format
-   pnpm lint
+   # Run format/lint/test if detected in Step 1.5
+   if [ -n "$FORMAT_CMD" ]; then $FORMAT_CMD; fi
+   if [ -n "$LINT_CMD" ]; then $LINT_CMD; fi
+   if [ -n "$TEST_CMD" ]; then $TEST_CMD; fi
+   ```
+
+   If no commands were detected, skip with warning:
+   ```
+   ⚠️  No quality check commands found - skipping format/lint/test
    ```
 
    5. Stage changes:
@@ -409,11 +433,17 @@ For phases where tasks are independent:
    {TECH_STACK content from Step 1.5}
    </tech-stack>
 
-   3. Quality checks (MUST run all):
+   3. Quality checks (run if commands detected):
    ```bash
-   pnpm format
-   pnpm lint
-   pnpm test
+   # Run format/lint/test if detected in Step 1.5
+   if [ -n "$FORMAT_CMD" ]; then $FORMAT_CMD; fi
+   if [ -n "$LINT_CMD" ]; then $LINT_CMD; fi
+   if [ -n "$TEST_CMD" ]; then $TEST_CMD; fi
+   ```
+
+   If no commands were detected, skip with warning:
+   ```
+   ⚠️  No quality check commands found - skipping format/lint/test
    ```
 
    5. Stage changes (but DO NOT commit):
@@ -559,15 +589,17 @@ For phases where tasks are independent:
    main
    ```
 
-   7. Run integration tests:
+   7. Run integration tests (if commands detected):
    ```bash
    # Check out the top of the stack (last parallel task)
    git checkout {run-id}-task-{task-id-2}-{short-name}
 
    # Run tests on the branch (includes all previous work)
-   pnpm test
-   pnpm lint
+   if [ -n "$TEST_CMD" ]; then $TEST_CMD; fi
+   if [ -n "$LINT_CMD" ]; then $LINT_CMD; fi
    ```
+
+   If no test commands found, verify manually or skip with warning.
 
    8. Report:
    - Confirmation all worktrees cleaned up
@@ -598,19 +630,32 @@ After all phases execute successfully:
 
 This skill enforces verification BEFORE claiming work is done.
 
-**Required verifications:**
+**Required verifications (if commands detected):**
 ```bash
 # Run full test suite
-pnpm test
+if [ -n "$TEST_CMD" ]; then
+  $TEST_CMD || { echo "❌ Tests failed"; exit 1; }
+fi
 
 # Run linting
-pnpm lint
+if [ -n "$LINT_CMD" ]; then
+  $LINT_CMD || { echo "❌ Linting failed"; exit 1; }
+fi
 
 # Run production build
-pnpm build
+if [ -n "$BUILD_CMD" ]; then
+  $BUILD_CMD || { echo "❌ Build failed"; exit 1; }
+fi
 
-# Verify all pass
-echo "All checks passed - ready to complete"
+# Verify all detected checks passed
+echo "✅ All quality checks passed - ready to complete"
+```
+
+**If no commands detected:**
+```
+⚠️  No test/lint/build commands found in project.
+Add to CLAUDE.md or constitution/testing.md for automated quality gates.
+Proceeding without verification - manual review recommended.
 ```
 
 **Critical:** Evidence before assertions. Never claim "tests pass" without running them.
@@ -659,9 +704,14 @@ Use the `finishing-a-development-branch` skill to:
 
 ## Quality Checks
 
-✅ All tests passing
-✅ Biome linting clean
-✅ Build successful
+Quality checks are project-specific (detected from CLAUDE.md, constitution, or common patterns):
+
+✅ Tests passing (if `TEST_CMD` detected)
+✅ Linting clean (if `LINT_CMD` detected)
+✅ Formatting applied (if `FORMAT_CMD` detected)
+✅ Build successful (if `BUILD_CMD` detected)
+
+If no commands detected, quality gates are skipped with warning to user.
 ✅ {total-commits} commits across {branch-count} task branches
 
 ## Next Steps
@@ -739,9 +789,10 @@ If one agent in parallel phase fails:
 ```bash
 git checkout {task-branch}
 # Debug and fix issue
-pnpm test
-pnpm format
-pnpm lint
+# Run quality checks (use project-specific commands)
+if [ -n "$TEST_CMD" ]; then $TEST_CMD; fi
+if [ -n "$FORMAT_CMD" ]; then $FORMAT_CMD; fi
+if [ -n "$LINT_CMD" ]; then $LINT_CMD; fi
 git add --all
 git commit -m "[{task-id}] Fix: {description}"
 ```
