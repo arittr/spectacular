@@ -25,12 +25,14 @@ echo "RUN_ID: $RUN_ID"
 
 # Extract feature slug from the spec path
 # Path pattern: .../specs/{runId}-{feature-slug}/spec.md
-# Get parent directory name and remove runId prefix
+# Use sed to extract directory name without nested command substitution
 SPEC_PATH="{spec-path}"
-DIR_NAME=$(echo "$SPEC_PATH" | awk -F/ '{print $(NF-1)}')
+DIR_NAME=$(echo "$SPEC_PATH" | sed 's|.*/specs/||; s|/spec.md||')
 FEATURE_SLUG=$(echo "$DIR_NAME" | sed "s/^${RUN_ID}-//")
 echo "FEATURE_SLUG: $FEATURE_SLUG"
 ```
+
+**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains.
 
 **If RUN_ID not found:**
 Generate one now (for backwards compatibility with old specs):
@@ -41,6 +43,8 @@ TIMESTAMP=$(date +%s)
 RUN_ID=$(echo "{feature-name}-$TIMESTAMP" | shasum -a 256 | head -c 6)
 echo "Generated RUN_ID: $RUN_ID (spec missing runId)"
 ```
+
+**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains.
 
 **Spec Directory Pattern:**
 Specs follow the pattern: `specs/{run-id}-{feature-slug}/spec.md`
@@ -65,6 +69,8 @@ else
   cd "${REPO_ROOT}/.worktrees/${RUN_ID}-main"
 fi
 ```
+
+**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains.
 
 **If worktree doesn't exist:**
 Error immediately with clear message:
