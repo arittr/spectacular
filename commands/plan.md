@@ -45,6 +45,34 @@ Plans are generated at: `specs/{run-id}-{feature-slug}/plan.md`
 
 **Announce:** "Using RUN_ID: {run-id} for {feature-slug} implementation"
 
+### Step 0.5: Switch to Worktree Context
+
+**Second action**: After extracting RUN_ID, switch to the worktree created by `/spectacular:spec`.
+
+```bash
+# Switch to worktree
+cd .worktrees/${RUN_ID}-main
+```
+
+**If worktree doesn't exist:**
+Error immediately with clear message:
+
+```markdown
+❌ Worktree Not Found
+
+The worktree for RUN_ID {run-id} doesn't exist.
+
+Run `/spectacular:spec {feature}` first to create the workspace.
+
+Expected worktree: .worktrees/{run-id}-main/
+```
+
+**IMPORTANT**: All subsequent operations happen in the worktree context.
+
+- Spec is read from: `.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md`
+- Plan will be written to: `.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md`
+- No fallback to main repo (worktree is required)
+
 ### Step 1: Invoke Task Decomposition Skill
 
 Announce: "I'm using the Task Decomposition skill to create an execution plan."
@@ -116,6 +144,18 @@ Verify:
 - ✅ No XL tasks (all split into M or smaller)
 - ✅ Time savings calculation looks reasonable
 
+### Step 2.5: Commit Plan to Worktree
+
+After plan generation and review, commit the plan to the `{run-id}-main` branch in the worktree:
+
+```bash
+cd .worktrees/${RUN_ID}-main
+git add specs/
+git commit -m "plan: add ${FEATURE_SLUG} implementation plan [${RUN_ID}]"
+```
+
+This ensures the plan is tracked in the worktree branch and doesn't affect the main repo.
+
 ### Step 3: Report to User
 
 Provide comprehensive summary:
@@ -125,7 +165,7 @@ Provide comprehensive summary:
 
 **RUN_ID**: {run-id}
 **Feature**: {feature-slug}
-**Location**: specs/{run-id}-{feature-slug}/plan.md
+**Location**: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
 
 ## Plan Summary
 
@@ -160,23 +200,42 @@ Provide comprehensive summary:
 ### Review Plan
 
 ```bash
-cat specs/{run-id}-{feature-slug}/plan.md
+cat .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
 ```
 ````
 
 ### Execute Plan
 
 ```bash
-/spectacular:execute @specs/{run-id}-{feature-slug}/plan.md
+/spectacular:execute @.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
 ```
 
 ### Modify Plan (if needed)
 
-Edit specs/{run-id}-{feature-slug}/plan.md directly, then run `/spectacular:execute`
+Edit .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md directly, then run `/spectacular:execute`
 
 ````
 
 ## Error Handling
+
+### Missing Worktree
+
+If the worktree doesn't exist when trying to switch context:
+
+```markdown
+❌ Worktree Not Found
+
+The worktree for RUN_ID {run-id} doesn't exist at .worktrees/{run-id}-main/
+
+This means `/spectacular:spec` hasn't been run yet for this feature.
+
+## Resolution
+
+1. Run `/spectacular:spec {feature-description}` first to create the worktree
+2. Then run `/spectacular:plan @.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md`
+
+Or if you have an existing spec in the main repo, it needs to be migrated to a worktree first.
+```
 
 ### Validation Failures
 
