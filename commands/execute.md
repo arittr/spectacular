@@ -241,7 +241,25 @@ For phases where tasks must run in order:
    - Commit all staged changes
    - Stack the branch on current branch automatically
 
-   7. Report completion with:
+   7. Verify branch creation completed:
+   ```bash
+   # Wait for git-spice to finish by verifying we're on the new branch
+   CURRENT_BRANCH=$(git branch --show-current)
+   EXPECTED_BRANCH="{run-id}-task-{task-id}-{short-name}"
+
+   if [[ "$CURRENT_BRANCH" != "$EXPECTED_BRANCH" ]]; then
+     echo "Warning: Expected branch $EXPECTED_BRANCH, currently on $CURRENT_BRANCH"
+     # Wait briefly for git-spice to complete
+     sleep 1
+     CURRENT_BRANCH=$(git branch --show-current)
+   fi
+
+   echo "On branch: $CURRENT_BRANCH"
+   ```
+
+   This prevents race conditions when git-spice is updating metadata.
+
+   8. Report completion with:
       - Summary of changes
       - Files modified
       - Test results
@@ -420,14 +438,32 @@ For phases where tasks are independent:
    - Commit all staged changes
    - Stack the branch on base branch automatically
 
-   7. Detach HEAD to release branch (critical for worktree cleanup):
+   7. Verify branch creation completed:
+   ```bash
+   # Wait for git-spice to finish by verifying we're on the new branch
+   CURRENT_BRANCH=$(git branch --show-current)
+   EXPECTED_BRANCH="{run-id}-task-{task-id}-{short-name}"
+
+   if [[ "$CURRENT_BRANCH" != "$EXPECTED_BRANCH" ]]; then
+     echo "Warning: Expected branch $EXPECTED_BRANCH, currently on $CURRENT_BRANCH"
+     # Wait briefly for git-spice to complete
+     sleep 1
+     CURRENT_BRANCH=$(git branch --show-current)
+   fi
+
+   echo "On branch: $CURRENT_BRANCH"
+   ```
+
+   This prevents race conditions when git-spice is updating metadata during parallel execution.
+
+   8. Detach HEAD to release branch (critical for worktree cleanup):
    ```bash
    git switch --detach
    ```
 
    This makes the branch accessible in the parent repo after worktree removal.
 
-   8. Report completion with:
+   9. Report completion with:
       - Summary of changes
       - Files modified
       - Test results
