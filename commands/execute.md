@@ -41,6 +41,8 @@ RUN_ID=$(echo "{feature-name}-$TIMESTAMP" | shasum -a 256 | head -c 6)
 echo "Generated RUN_ID: $RUN_ID (plan missing runId)"
 ```
 
+**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains.
+
 **Store RUN_ID for use in:**
 - Branch naming: `{run-id}-task-X-Y-name`
 - Filtering: `git branch | grep ^{run-id}-`
@@ -257,6 +259,8 @@ For phases where tasks must run in order:
    echo "On branch: $CURRENT_BRANCH"
    ```
 
+   **IMPORTANT**: Execute this entire block as a single multi-line Bash tool call.
+
    This prevents race conditions when git-spice is updating metadata.
 
    8. Report completion with:
@@ -453,6 +457,8 @@ For phases where tasks are independent:
 
    echo "On branch: $CURRENT_BRANCH"
    ```
+
+   **IMPORTANT**: Execute this entire block as a single multi-line Bash tool call.
 
    This prevents race conditions when git-spice is updating metadata during parallel execution.
 
