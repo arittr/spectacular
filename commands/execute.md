@@ -47,7 +47,28 @@ echo "Generated RUN_ID: $RUN_ID (plan missing runId)"
 
 **Announce:** "Executing with RUN_ID: {run-id}"
 
-### Step 0b: Check for Existing Work
+### Step 0b: Switch to Worktree Base
+
+**After extracting RUN_ID, switch to the worktree context:**
+
+```bash
+# Verify worktree exists
+if [ ! -d ".worktrees/${RUN_ID}-main" ]; then
+  echo "❌ Error: Worktree not found at .worktrees/${RUN_ID}-main"
+  echo "Run /spectacular:spec first to create the workspace."
+  exit 1
+fi
+
+# Switch to worktree directory
+cd .worktrees/${RUN_ID}-main
+pwd  # Confirm we're in worktree
+```
+
+**All subsequent operations happen in this worktree directory.**
+
+**Announce:** "Working in worktree: .worktrees/{run-id}-main/"
+
+### Step 0c: Check for Existing Work
 
 Before starting or resuming, delegate git state check to a subagent:
 
@@ -95,6 +116,8 @@ git branch | grep "^  {run-id}-task-"
 **If no existing work:**
 - Continue to Step 1 (Read and Parse Plan)
 
+**Note:** All git operations in this step happen relative to the `{runId}-main` branch, not the main repo's current branch.
+
 ### Step 1: Read and Parse Plan
 
 Read the plan file and extract:
@@ -130,19 +153,24 @@ For phases where tasks must run in order:
 
    TASK: {task-name}
    CURRENT BRANCH: {current-branch}
+   WORKTREE: .worktrees/{run-id}-main
 
    CRITICAL - CONTEXT MANAGEMENT:
    You are a subagent with isolated context. Complete this task independently.
+   You are working in the {run-id}-main worktree, not the main repo.
 
    IMPLEMENTATION:
 
-   1. Verify you're on the correct branch:
+   1. Verify you're in the worktree and on the correct branch:
    ```bash
+   pwd  # Should be .worktrees/{run-id}-main
    git branch --show-current  # Should be {current-branch}
    ```
 
-   2. Read task details from: /Users/drewritter/projects/bignight.party/{plan-path}
+   2. Read task details from: {plan-path}
       Find: "Task {task-id}: {task-name}"
+
+      Note: Plan is in the worktree at specs/{runId}-{slug}/plan.md
 
    3. Implement according to:
       - Files specified in task
@@ -230,23 +258,27 @@ For phases where tasks are independent:
 
    TASK: Create worktrees for {task-count} parallel tasks
 
+   BASE: You are in .worktrees/{run-id}-main worktree, branching from {run-id}-main branch
+
    IMPLEMENTATION:
 
-   1. Get current branch:
+   1. Get current branch (should be {run-id}-main or a task branch stacked on it):
    ```bash
    CURRENT_BRANCH=$(git branch --show-current)
    echo "Base branch: $CURRENT_BRANCH"
    ```
 
-   2. Create worktrees (one per parallel task):
+   2. Create worktrees (one per parallel task, branching from {run-id}-main):
    ```bash
-   # Create .worktrees directory if needed
-   mkdir -p .worktrees
+   # Worktrees are created relative to parent repo's .worktrees/ directory
+   # Each parallel task branches from {run-id}-main
 
    # For each parallel task, create a worktree (namespaced by RUN_ID)
-   git worktree add --detach ./.worktrees/{run-id}-task-{task-id-1} $CURRENT_BRANCH
-   git worktree add --detach ./.worktrees/{run-id}-task-{task-id-2} $CURRENT_BRANCH
+   git worktree add --detach ../../.worktrees/{run-id}-task-{task-id-1} $CURRENT_BRANCH
+   git worktree add --detach ../../.worktrees/{run-id}-task-{task-id-2} $CURRENT_BRANCH
    # ... etc for each parallel task
+
+   # Note: Path is relative to .worktrees/{run-id}-main/ working directory
    ```
 
    3. Verify worktrees created:
@@ -263,11 +295,12 @@ For phases where tasks are independent:
    Store worktree info for later cleanup:
    ```javascript
    taskWorktrees = {
-     '{run-id}-task-3-1': {path: './.worktrees/{run-id}-task-3-1', baseBranch: '{run-id}-task-2-3-...'},
-     '{run-id}-task-3-2': {path: './.worktrees/{run-id}-task-3-2', baseBranch: '{run-id}-task-2-3-...'}
+     '{run-id}-task-3-1': {path: './.worktrees/{run-id}-task-3-1', baseBranch: '{run-id}-main'},
+     '{run-id}-task-3-2': {path: './.worktrees/{run-id}-task-3-2', baseBranch: '{run-id}-main'}
    }
    ```
 
+   Note: All parallel tasks branch from `{run-id}-main` (or current task branch if in sequential phase).
    Note: `.worktrees/` is gitignored to prevent contamination.
 
 3. **Spawn parallel agents** (CRITICAL: Single message with multiple Task tools):
@@ -286,12 +319,13 @@ For phases where tasks are independent:
    - You have your own working directory: {worktree-path}
    - Other parallel tasks cannot interfere with your files
    - You must cd into your worktree before starting
+   - You are branching from {run-id}-main, not the main repo's branch
    - When done, report completion and do NOT clean up worktree
 
    SETUP:
    ```bash
    cd {worktree-path}
-   git branch --show-current  # Should be {base-branch}
+   git branch --show-current  # Should be {base-branch} (likely {run-id}-main)
    pwd  # Confirm you're in worktree directory
    ```
 
@@ -412,7 +446,7 @@ For phases where tasks are independent:
    5. Create linear stack from parallel branches:
    ```bash
    # Stack parallel branches linearly (task order: 2.1 -> 2.2 -> 2.3 etc)
-   # First task stays on base, subsequent tasks stack on previous
+   # First task stays on base ({run-id}-main), subsequent tasks stack on previous
    git checkout {run-id}-task-{task-id-2}-{short-name}
    gs upstack onto {run-id}-task-{task-id-1}-{short-name}
 
@@ -426,12 +460,12 @@ For phases where tasks are independent:
    gs log short
    ```
 
-   Expected: Linear stack (task number order):
+   Expected: Linear stack (task number order), all stacked on {run-id}-main:
    ```
    ┏━□ {run-id}-task-2-2-validation-schemas (on {run-id}-task-2-1-models-layer)
        ┏━┻□ {run-id}-task-2-1-models-layer (on {run-id}-task-1-2-install-tsx)
-     ┏━┻□ {run-id}-task-1-2-install-tsx
-   ┏━┻□ {run-id}-task-1-1-game-schema
+     ┏━┻□ {run-id}-task-1-2-install-tsx (on {run-id}-main)
+   ┏━┻□ {run-id}-main
    main
    ```
 
@@ -509,7 +543,8 @@ Use the `finishing-a-development-branch` skill to:
 
 **RUN_ID**: {run-id}
 **Feature**: {feature-name}
-**Stack**: {count} task branches
+**Worktree**: .worktrees/{run-id}-main/
+**Stack**: {count} task branches (all stacked on {run-id}-main)
 
 ## Execution Summary
 
@@ -519,6 +554,8 @@ Use the `finishing-a-development-branch` skill to:
 
 **Tasks Completed**: {count}
 **Commits**: {count}
+
+**Isolation**: All work completed in worktree. Main repo unchanged.
 
 ## Parallelization Results
 
@@ -541,6 +578,7 @@ Use the `finishing-a-development-branch` skill to:
 
 ### Review Changes
 ```bash
+cd .worktrees/{run-id}-main       # Navigate to worktree if not already there
 gs log short                      # View all branches and commits in stack
 gs log long                       # Detailed view with commit messages
 git diff main..HEAD               # See all changes in current stack
@@ -549,13 +587,26 @@ git branch | grep "^  {run-id}-"  # List all branches for this run
 
 ### Submit for Review
 ```bash
+cd .worktrees/{run-id}-main       # Navigate to worktree
 gs stack submit  # Submits entire stack as PRs (per using-git-spice skill)
 ```
 
 ### Or Continue with Dependent Feature
 ```bash
+cd .worktrees/{run-id}-main       # Navigate to worktree
 gs branch create  # Creates new branch stacked on current
 ```
+
+### Cleanup Worktree (after PRs merged)
+```bash
+# From main repo root:
+git worktree remove .worktrees/{run-id}-main
+
+# Optional: Delete the {run-id}-main branch
+git branch -d {run-id}-main
+```
+
+**Important**: Main repo remains unchanged. All work is in the worktree and task branches.
 ```
 
 ## Error Handling
@@ -645,12 +696,35 @@ This should not happen if task independence was verified correctly.
 4. Update plan to mark tasks as dependent (sequential) not parallel
 ```
 
-### Worktree Creation Failure
+### Worktree Not Found
 
-If worktree creation fails:
+If the {run-id}-main worktree doesn't exist:
 
 ```markdown
-❌ Worktree Creation Failed
+❌ Worktree Not Found
+
+**Error**: .worktrees/{run-id}-main does not exist
+
+This means `/spectacular:spec` was not run, or the worktree was removed.
+
+## Resolution
+
+Run the spec command first to create the workspace:
+```bash
+/spectacular:spec {feature-name}
+```
+
+This will create `.worktrees/{run-id}-main/` and the spec file.
+Then run `/spectacular:plan` to generate the plan.
+Finally, run `/spectacular:execute` to execute the plan.
+```
+
+### Parallel Task Worktree Creation Failure
+
+If worktree creation for parallel tasks fails:
+
+```markdown
+❌ Parallel Task Worktree Creation Failed
 
 **Error**: {error-message}
 
