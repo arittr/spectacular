@@ -50,8 +50,17 @@ Plans are generated at: `specs/{run-id}-{feature-slug}/plan.md`
 **Second action**: After extracting RUN_ID, switch to the worktree created by `/spectacular:spec`.
 
 ```bash
-# Switch to worktree
-cd .worktrees/${RUN_ID}-main
+# Get absolute repo root to avoid recursive paths
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Check if already in correct worktree (avoid double cd)
+CURRENT_DIR=$(pwd)
+if [[ "$CURRENT_DIR" == "${REPO_ROOT}/.worktrees/${RUN_ID}-main" ]] || [[ "$CURRENT_DIR" == *"/.worktrees/${RUN_ID}-main" ]]; then
+  echo "Already in worktree ${RUN_ID}-main"
+else
+  # Switch to worktree using absolute path
+  cd "${REPO_ROOT}/.worktrees/${RUN_ID}-main"
+fi
 ```
 
 **If worktree doesn't exist:**
@@ -158,14 +167,17 @@ This ensures the plan is tracked in the worktree branch and doesn't affect the m
 
 ### Step 3: Report to User
 
+**IMPORTANT**: After reporting completion, **STOP HERE**. Do not proceed to execution automatically. The user must review the plan and explicitly run `/spectacular:execute` when ready.
+
 Provide comprehensive summary:
 
 ````markdown
-✅ Execution Plan Generated
+✅ Execution Plan Generated & Committed
 
 **RUN_ID**: {run-id}
 **Feature**: {feature-slug}
 **Location**: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
+**Branch**: {run-id}-main (committed in worktree)
 
 ## Plan Summary
 
@@ -195,24 +207,40 @@ Provide comprehensive summary:
   - Time: {sequential}h → {parallel}h
   - Savings: {hours}h
 
-## Next Steps
+## Next Steps (User Actions - DO NOT AUTO-EXECUTE)
 
-### Review Plan
+**The plan command is complete. The following are suggestions for the user, not instructions to execute automatically.**
+
+### 1. Review the Plan
 
 ```bash
 cat .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
 ```
-````
 
-### Execute Plan
+Verify task breakdown, dependencies, and estimates are correct.
+
+### 2. Execute the Plan (when ready)
 
 ```bash
 /spectacular:execute @.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
 ```
 
-### Modify Plan (if needed)
+This is a separate command. Only run after reviewing the plan.
 
-Edit .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md directly, then run `/spectacular:execute`
+### 3. Modify Plan (if needed)
+
+```bash
+# Edit the plan file directly
+vim .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
+
+# Commit changes
+cd .worktrees/{run-id}-main
+git add specs/
+git commit -m "plan: adjust task breakdown [${RUN_ID}]"
+
+# Then execute
+/spectacular:execute @.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
+```
 
 ````
 

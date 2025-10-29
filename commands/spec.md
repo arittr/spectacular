@@ -240,6 +240,8 @@ Options:
 
 ### Step 4: Report Completion
 
+**IMPORTANT**: After reporting completion, **STOP HERE**. Do not proceed to plan generation automatically. The user must review the spec and explicitly run `/spectacular:plan` when ready.
+
 After validation passes OR clarifications documented, report to user:
 
 **If validation passed:**
@@ -257,9 +259,9 @@ Requirements Quality: ✓
 
 Note: Spec is in isolated worktree, main repo unchanged.
 
-Next Steps:
+Next Steps (User Actions - DO NOT AUTO-EXECUTE):
 1. Review the spec: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
-2. Create implementation plan: /spectacular:plan @.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
+2. When ready, create implementation plan: /spectacular:plan @.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
 ```
 
 **If clarifications needed:**
