@@ -27,7 +27,8 @@ Example: `/spectacular:spec magic link authentication with Auth.js`
 
 ```bash
 # Generate 6-char hash from feature name + timestamp
-RUN_ID=$(echo "{feature-description}-$(date +%s)" | shasum -a 256 | head -c 6)
+TIMESTAMP=$(date +%s)
+RUN_ID=$(echo "{feature-description}-$TIMESTAMP" | shasum -a 256 | head -c 6)
 echo "RUN_ID: $RUN_ID"
 ```
 
