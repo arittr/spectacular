@@ -25,49 +25,75 @@ Where `a1b2c3` is the runId and `magic-link-auth` is the feature slug.
 
 ### Step 0a: Extract Run ID from Plan
 
-**First action**: Read the plan and extract the RUN_ID from frontmatter.
+**User provided plan path**: The user gave you a plan path like `.worktrees/3a00a7-main/specs/3a00a7-agent-standardization-refactor/plan.md`
+
+**Extract RUN_ID from the path:**
+
+The RUN_ID is the first segment of the spec directory name (before the first dash).
+
+For example:
+- Path: `.worktrees/3a00a7-main/specs/3a00a7-agent-standardization-refactor/plan.md`
+- Directory: `3a00a7-agent-standardization-refactor`
+- RUN_ID: `3a00a7`
 
 ```bash
-# Extract runId from plan frontmatter
-RUN_ID=$(grep "^runId:" {plan-path} | awk '{print $2}')
-echo "RUN_ID: $RUN_ID"
+# Get absolute repo root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# User provided plan path (substitute the actual path here)
+PLAN_PATH="{the-plan-path-user-provided}"
+
+# Extract RUN_ID from the directory name
+# Plan path format: .worktrees/{runid}-main/specs/{runid}-feature-name/plan.md
+# or just: specs/{runid}-feature-name/plan.md
+DIR_NAME=$(basename "$(dirname "$PLAN_PATH")")
+RUN_ID=$(echo "$DIR_NAME" | cut -d'-' -f1)
+
+echo "Extracted RUN_ID: $RUN_ID"
+
+# Verify RUN_ID is not empty
+if [ -z "$RUN_ID" ]; then
+  echo "❌ Error: Could not extract RUN_ID from plan path: $PLAN_PATH"
+  exit 1
+fi
 ```
 
-**If RUN_ID not found:**
-Generate one now (for backwards compatibility with old plans):
-```bash
-TIMESTAMP=$(date +%s)
-RUN_ID=$(echo "{feature-name}-$TIMESTAMP" | shasum -a 256 | head -c 6)
-echo "Generated RUN_ID: $RUN_ID (plan missing runId)"
-```
+**IMPORTANT**:
+- Replace `{the-plan-path-user-provided}` with the actual path from the user's command
+- Execute this entire block as a single multi-line Bash tool call
+- Do NOT convert to a single line with `&&` chains
 
 **Store RUN_ID for use in:**
 - Branch naming: `{run-id}-task-X-Y-name`
-- Filtering: `git branch | grep ^{run-id}-`
+- Filtering: `git branch | grep "^  {run-id}-"`
 - Cleanup: Identify which branches belong to this run
 
 **Announce:** "Executing with RUN_ID: {run-id}"
 
-### Step 0b: Switch to Worktree Base
+### Step 0b: Verify Worktree Exists
 
-**After extracting RUN_ID, switch to the worktree context:**
+**After extracting RUN_ID, verify the worktree exists:**
 
 ```bash
+# Get absolute repo root (stay in main repo, don't cd into worktree)
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
 # Verify worktree exists
-if [ ! -d ".worktrees/${RUN_ID}-main" ]; then
+if [ ! -d "$REPO_ROOT/.worktrees/${RUN_ID}-main" ]; then
   echo "❌ Error: Worktree not found at .worktrees/${RUN_ID}-main"
   echo "Run /spectacular:spec first to create the workspace."
   exit 1
 fi
 
-# Switch to worktree directory
-cd .worktrees/${RUN_ID}-main
-pwd  # Confirm we're in worktree
+# Verify it's a valid worktree
+git worktree list | grep "${RUN_ID}-main"
 ```
 
-**All subsequent operations happen in this worktree directory.**
+**IMPORTANT: Orchestrator stays in main repo. All worktree operations use `git -C .worktrees/{run-id}-main` or absolute paths.**
 
-**Announce:** "Working in worktree: .worktrees/{run-id}-main/"
+**This ensures task worktrees are created at the same level as {run-id}-main, not nested inside it.**
+
+**Announce:** "Verified worktree exists: .worktrees/{run-id}-main/"
 
 ### Step 0c: Check for Existing Work
 
@@ -80,13 +106,19 @@ TASK: Determine if work has already started and identify resume point
 
 IMPLEMENTATION:
 
-1. Check current state:
+1. Check current state in the main worktree:
 ```bash
-git branch --show-current
-git log --oneline --grep="\[Task" -20
+# Get repo root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Check state in main worktree using git -C
+git -C "$REPO_ROOT/.worktrees/{run-id}-main" branch --show-current
+git -C "$REPO_ROOT/.worktrees/{run-id}-main" log --oneline --grep="\[Task" -20
+git -C "$REPO_ROOT/.worktrees/{run-id}-main" status
+
+# Check git-spice stack (from main repo)
 gs ls
 gs branch tree
-git status
 
 # Filter branches for this RUN_ID
 git branch | grep "^  {run-id}-task-"
@@ -99,7 +131,7 @@ git branch | grep "^  {run-id}-task-"
    - Determine which phase and task to resume from
 
 3. Report:
-   - Current branch name
+   - Current branch name in main worktree
    - List of completed tasks (from commit messages)
    - List of existing task branches
    - Resume point (next incomplete task)
@@ -117,7 +149,7 @@ git branch | grep "^  {run-id}-task-"
 **If no existing work:**
 - Continue to Step 1 (Read and Parse Plan)
 
-**Note:** All git operations in this step happen relative to the `{runId}-main` branch, not the main repo's current branch.
+**Note:** All git operations check state in `{runId}-main` worktree using `git -C` or absolute paths.
 
 ### Step 1: Read and Parse Plan
 
@@ -125,7 +157,28 @@ Read the plan file and extract:
 - Feature name
 - All phases (with strategy: sequential or parallel)
 - All tasks within each phase
-- Task details (files, dependencies, acceptance criteria)
+
+**For each task, extract and format:**
+- Task ID and name
+- Files to modify (explicit paths)
+- Acceptance criteria (bullet points)
+- Dependencies (which tasks must complete first)
+
+**Store extracted task info for subagent prompts** (saves ~1000 tokens per subagent):
+
+```
+Task 4.2:
+  Name: Integrate prompts module into generator
+  Files:
+    - src/generator.ts
+    - src/types.ts
+  Acceptance Criteria:
+    - Import PromptService from prompts module
+    - Replace manual prompt construction with PromptService.getCommitPrompt()
+    - Update tests to mock PromptService
+    - All tests pass
+  Dependencies: Task 4.1 (fallback logic removed)
+```
 
 Verify plan structure:
 - ✅ Has phases with clear strategies
@@ -133,373 +186,287 @@ Verify plan structure:
 - ✅ All tasks have acceptance criteria
 - ✅ Dependencies make sense
 
+### Step 1.5: Detect Project Commands (Optional)
+
+**Optionally detect project-specific quality check commands for subagents to use.**
+
+**This is optional - most projects define commands in CLAUDE.md that subagents can discover.**
+
+If you want to provide hints, check for common patterns:
+- **TypeScript/JavaScript**: `package.json` scripts
+- **Python**: `pytest`, `ruff`, `black`
+- **Go**: `go test`, `golangci-lint`
+- **Rust**: `cargo test`, `cargo clippy`
+
+**If detected, mention in subagent prompts:**
+- `TEST_CMD` - Command to run tests
+- `LINT_CMD` - Command to run linting
+- `FORMAT_CMD` - Command to format code
+- `BUILD_CMD` - Command to build project
+
+**If not detected, subagents will check CLAUDE.md or skip quality checks with warning.**
+
+**IMPORTANT: Do NOT read constitution files here. Let subagents read them as needed to reduce orchestrator token usage.**
+
 ### Step 2: Execute Phases
 
 **If resuming:** Start from the incomplete phase/task identified in Step 0.
 
 For each phase in the plan, execute based on strategy:
 
+**IMPORTANT:** After each phase completes, MUST run code review using `requesting-code-review` skill before proceeding to next phase.
+
 #### Sequential Phase Strategy
 
 For phases where tasks must run in order:
 
-**Execute tasks sequentially with stacked branches:**
+**OPTIMIZATION: Use single worktree for entire phase (not per-task)**
 
-1. For each task in the phase:
+Sequential tasks build on each other, so they can share a worktree. This saves ~2-3 minutes per task from worktree creation/destruction and dependency installs.
 
-   **Spawn subagent for task implementation** (use Task tool):
+1. **Create phase worktree once:**
+
+   Use `using-git-worktrees` skill to:
+   - Create worktree at `.worktrees/{run-id}-phase-{phase-id}`
+   - Branch from current branch in `{run-id}-main` worktree
+   - Ensure worktree is created at same level as `{run-id}-main` (not nested)
+
+2. **Run project setup once:**
+
+   In the phase worktree, run initial setup:
+   - Check if package.json changed: `git diff --quiet HEAD package.json package-lock.json`
+   - If changed: Run install (e.g., `bun install`, `npm install`)
+   - If unchanged: Skip install (save 30s-1m per task)
+
+3. **For each task in the phase, spawn subagent:**
 
    ```
-   ROLE: You are implementing Task {task-id}.
+   ROLE: Implement Task {task-id} in shared phase worktree
+
+   WORKTREE: .worktrees/{run-id}-phase-{phase-id}
+   CURRENT BRANCH: {current-branch-in-worktree}
 
    TASK: {task-name}
-   CURRENT BRANCH: {current-branch}
-   WORKTREE: .worktrees/{run-id}-main
 
-   CRITICAL - CONTEXT MANAGEMENT:
-   You are a subagent with isolated context. Complete this task independently.
-   You are working in the {run-id}-main worktree, not the main repo.
+   FILES TO MODIFY:
+   {extracted-files-list}
 
-   IMPLEMENTATION:
+   ACCEPTANCE CRITERIA:
+   {extracted-acceptance-criteria}
 
-   1. Verify you're in the worktree and on the correct branch:
-   ```bash
-   pwd  # Should be .worktrees/{run-id}-main
-   git branch --show-current  # Should be {current-branch}
-   ```
+   DEPENDENCIES: {extracted-dependencies}
 
-   2. Read task details from: {plan-path}
-      Find: "Task {task-id}: {task-name}"
+   INSTRUCTIONS:
 
-      Note: Plan is in the worktree at specs/{runId}-{slug}/plan.md
+   1. Navigate to phase worktree (you're working here with other phase tasks)
 
-   3. Implement according to:
-      - Files specified in task
-      - Acceptance criteria in task
-      - Project constitution (see @docs/constitutions/current/)
+   2. Read constitution: docs/constitutions/current/
+      - architecture.md - Project structure and boundaries
+      - patterns.md - Mandatory patterns to follow
+      - tech-stack.md - Approved libraries and versions
 
-   4. Quality checks (MUST run all):
-   ```bash
-   pnpm format
-   pnpm lint
-   ```
+   3. Implement task following constitution patterns
+      - Modify the files listed above
+      - Meet all acceptance criteria
+      - Follow architecture/patterns from constitution
 
-   5. Stage changes:
-   ```bash
-   git add --all
-   git status  # Verify changes staged
-   ```
+   4. Run quality checks (check CLAUDE.md for commands)
+      - Dependency install already done (skip it)
+      - Run tests/lint/build
 
-   6. Create branch and commit with gs branch create:
-   ```bash
-   gs branch create {run-id}-task-{task-id}-{short-name} -m "[Task {task-id}] {task-name}
+   5. Use `using-git-spice` skill to:
+      - Create branch: {run-id}-task-{task-id}-{short-name}
+      - Commit with message: "[Task {task-id}] {task-name}"
+      - Include acceptance criteria in commit body
+      - Stay on new branch (next task will build on it)
 
-   {Brief summary of changes}
+   6. Report completion (files changed, branch created, tests passing)
 
-   Acceptance criteria met:
-   - {criterion 1}
-   - {criterion 2}
-
-   🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-   Co-Authored-By: Claude <noreply@anthropic.com>"
-   ```
-
-   This will:
-   - Create a new branch `{run-id}-task-{task-id}-{short-name}`
-   - Commit all staged changes
-   - Stack the branch on current branch automatically
-
-   7. Report completion with:
-      - Summary of changes
-      - Files modified
-      - Test results
-      - Branch name created
-      - Commit hash
-      - Any issues encountered
+   REFERENCE (if you need more context):
+   - Full plan: specs/{runId}-{slug}/plan.md
 
    CRITICAL:
-   - ✅ Stay on current branch (will move to new branch after commit)
-   - ✅ Run ALL quality checks
-   - ✅ Stage changes with git add
-   - ✅ Use gs branch create with -m flag to commit
-   - ✅ Follow mandatory patterns
+   - Work in phase worktree (shared with other phase tasks)
+   - Stay on your branch when done (next task builds on it)
+   - Do NOT clean up worktree
    ```
 
-2. After ALL tasks in phase complete:
+4. **After ALL tasks complete, clean up phase worktree:**
 
-   **Use `requesting-code-review` skill:**
+   Use `using-git-worktrees` skill to remove `.worktrees/{run-id}-phase-{phase-id}`
 
-   Dispatch code-reviewer subagent to review the entire phase:
-   - All task branches in this phase
-   - Verify patterns followed
+5. **Stack branches in main worktree:**
+
+   Use `using-git-spice` skill to:
+   - Navigate to `{run-id}-main` worktree temporarily
+   - Track and stack all phase branches linearly (task order)
+   - Verify stack with `gs log short`
+   - Return to main repo
+
+3. After branches are stacked:
+
+   **MANDATORY: Use `requesting-code-review` skill to dispatch code review subagent:**
+
+   **Announce:** "Phase {phase-id} complete. Using requesting-code-review skill to validate implementation."
+
+   Use the Skill tool to invoke the `requesting-code-review` skill:
+
+   ```
+   Skill tool: requesting-code-review
+   ```
+
+   The code-reviewer subagent will:
+   - Review all task branches in this phase
+   - Verify constitution patterns followed
    - Check acceptance criteria met
-   - Review quality and consistency
+   - Validate code quality and consistency
+   - Report issues or approve
 
-3. Address review feedback if needed
+3. Address review feedback if needed:
+   - If reviewer reports issues, fix them before proceeding
+   - Re-run code review after fixes
+   - Do NOT proceed to next phase until review passes
 
-4. Phase is complete when code review passes
+4. Phase is complete ONLY when code review passes
+
+   **Evidence required:** Code review approval message from requesting-code-review skill
 
 #### Parallel Phase Strategy
 
 For phases where tasks are independent:
 
-**Use git worktrees for true parallel isolation (per using-git-worktrees skill):**
+**CRITICAL: Parallel tasks MUST use isolated worktrees. DO NOT skip worktree creation.**
 
 1. **Verify independence** (from plan's dependency analysis):
    - Confirm no file overlaps between tasks
    - Check dependencies are satisfied
 
-2. **Delegate worktree creation to setup subagent**:
+2. **MANDATORY: Create isolated worktree for EACH task BEFORE spawning agents**
 
-   Spawn a setup subagent to create all worktrees for this phase:
+   **You MUST create worktrees first. Do NOT spawn agents until all worktrees exist.**
 
-   ```
-   ROLE: Setup parallel worktrees for Phase {phase-id}
+   Use `using-git-worktrees` skill to:
+   - Get base branch from `{run-id}-main` worktree
+   - Create worktree for each parallel task: `.worktrees/{run-id}-task-{task-id}`
+   - Branch from current branch in `{run-id}-main` worktree
+   - Verify all worktrees created (one per parallel task)
+   - Optionally run dependency installs if package files changed
 
-   TASK: Create worktrees for {task-count} parallel tasks
+   **Announce:** "Created {count} isolated worktrees for parallel execution"
 
-   BASE: You are in .worktrees/{run-id}-main worktree, branching from {run-id}-main branch
+3. **AFTER all worktrees exist, spawn parallel agents:**
 
-   IMPLEMENTATION:
-
-   1. Get current branch (should be {run-id}-main or a task branch stacked on it):
-   ```bash
-   CURRENT_BRANCH=$(git branch --show-current)
-   echo "Base branch: $CURRENT_BRANCH"
-   ```
-
-   2. Create worktrees (one per parallel task, branching from {run-id}-main):
-   ```bash
-   # Worktrees are created relative to parent repo's .worktrees/ directory
-   # Each parallel task branches from {run-id}-main
-
-   # For each parallel task, create a worktree (namespaced by RUN_ID)
-   git worktree add --detach ../../.worktrees/{run-id}-task-{task-id-1} $CURRENT_BRANCH
-   git worktree add --detach ../../.worktrees/{run-id}-task-{task-id-2} $CURRENT_BRANCH
-   # ... etc for each parallel task
-
-   # Note: Path is relative to .worktrees/{run-id}-main/ working directory
-   ```
-
-   3. Verify worktrees created:
-   ```bash
-   git worktree list
-   ```
-
-   4. Report:
-   - List of worktrees created with their paths
-   - Base branch name
-   - Confirmation all worktrees are ready
-   ```
-
-   Store worktree info for later cleanup:
-   ```javascript
-   taskWorktrees = {
-     '{run-id}-task-3-1': {path: './.worktrees/{run-id}-task-3-1', baseBranch: '{run-id}-main'},
-     '{run-id}-task-3-2': {path: './.worktrees/{run-id}-task-3-2', baseBranch: '{run-id}-main'}
-   }
-   ```
-
-   Note: All parallel tasks branch from `{run-id}-main` (or current task branch if in sequential phase).
-   Note: `.worktrees/` is gitignored to prevent contamination.
-
-3. **Spawn parallel agents** (CRITICAL: Single message with multiple Task tools):
+   **CRITICAL: Single message with multiple Task tools**
 
    For each task, spawn agent with this prompt:
 
    ```
-   ROLE: You are implementing Task {task-id}.
+   ROLE: Implement Task {task-id} in ISOLATED worktree
+
+   WORKTREE: .worktrees/{run-id}-task-{task-id} ← YOUR worktree (not {run-id}-main!)
 
    TASK: {task-name}
-   WORKTREE: {worktree-path}
-   BASE BRANCH: {base-branch}
 
-   CRITICAL - WORKTREE ISOLATION:
-   You are working in an isolated git worktree. This means:
-   - You have your own working directory: {worktree-path}
-   - Other parallel tasks cannot interfere with your files
-   - You must cd into your worktree before starting
-   - You are branching from {run-id}-main, not the main repo's branch
-   - When done, report completion and do NOT clean up worktree
+   FILES TO MODIFY:
+   {extracted-files-list}
 
-   SETUP:
+   ACCEPTANCE CRITERIA:
+   {extracted-acceptance-criteria}
+
+   DEPENDENCIES: {extracted-dependencies}
+
+   CRITICAL FIRST STEP - VERIFY ISOLATION:
    ```bash
-   cd {worktree-path}
-   git branch --show-current  # Should be {base-branch} (likely {run-id}-main)
-   pwd  # Confirm you're in worktree directory
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+   cd "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}"
+   pwd  # MUST show: .worktrees/{run-id}-task-{task-id}
    ```
 
-   IMPLEMENTATION:
+   If pwd shows anything else (like {run-id}-main), STOP and report error.
 
-   1. Read plan from: {plan-path}
-      Find: "Task {task-id}: {task-name}"
+   INSTRUCTIONS:
 
-   2. Implement according to:
-      - Files specified in task
-      - Acceptance criteria in task
-      - Project constitution (see @docs/constitutions/current/)
+   1. You're in isolated worktree: .worktrees/{run-id}-task-{task-id}
 
-   3. Quality checks (MUST run all):
-   ```bash
-   pnpm format
-   pnpm lint
-   pnpm test
-   ```
+   2. Read constitution: docs/constitutions/current/
+      - architecture.md - Project structure and boundaries
+      - patterns.md - Mandatory patterns to follow
+      - tech-stack.md - Approved libraries and versions
 
-   5. Stage changes (but DO NOT commit):
-   ```bash
-   git add --all
-   git status  # Verify changes staged
-   ```
+   3. Implement task following constitution patterns
+      - Modify the files listed above
+      - Meet all acceptance criteria
+      - Follow architecture/patterns from constitution
 
-   6. Create branch and commit with gs branch create:
-   ```bash
-   gs branch create {run-id}-task-{task-id}-{short-name} -m "[Task {task-id}] {task-name}
+   4. Run quality checks (check CLAUDE.md for commands)
+      - Dependency install may have been skipped (already done)
+      - Run tests/lint/build
 
-   {Brief summary of changes}
+   5. Use `using-git-spice` skill to:
+      - Create branch: {run-id}-task-{task-id}-{short-name}
+      - Commit with message: "[Task {task-id}] {task-name}"
+      - Include acceptance criteria in commit body
+      - Detach HEAD when done
 
-   Acceptance criteria met:
-   - {criterion 1}
-   - {criterion 2}
+   6. Report completion (files changed, branch created, tests passing)
 
-   🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-   Co-Authored-By: Claude <noreply@anthropic.com>"
-   ```
-
-   This will:
-   - Create a new branch `{run-id}-task-{task-id}-{short-name}`
-   - Commit all staged changes
-   - Stack the branch on base branch automatically
-
-   7. Detach HEAD to release branch (critical for worktree cleanup):
-   ```bash
-   git switch --detach
-   ```
-
-   This makes the branch accessible in the parent repo after worktree removal.
-
-   8. Report completion with:
-      - Summary of changes
-      - Files modified
-      - Test results
-      - Branch name created
-      - Confirmation that HEAD is detached
+   REFERENCE (if you need more context):
+   - Full plan: specs/{runId}-{slug}/plan.md
 
    CRITICAL:
-   - ✅ cd into worktree first
-   - ✅ Stay in worktree directory
-   - ✅ Implement ONLY this task
-   - ✅ Run ALL quality checks
-   - ✅ Stage changes with git add
-   - ✅ Use gs branch create with -m flag
-   - ✅ MUST detach HEAD after creating branch
-   - ❌ DO NOT clean up worktree (orchestrator does this)
-   - ❌ DO NOT touch other task files
+   - Work in your worktree only (other tasks running in parallel)
+   - Detach HEAD before finishing
+   - Do NOT clean up worktree
+   - Do NOT touch files from other tasks
    ```
 
-4. **Wait for all parallel agents to complete**
+5. **Wait for all parallel agents to complete**
    (Agents work independently, orchestrator collects results)
 
-5. **Delegate cleanup to cleanup subagent**:
+6. **Clean up parallel worktrees:**
 
-   After all parallel agents report completion, spawn a cleanup subagent:
+   Use `using-git-worktrees` skill to:
+   - Verify all task branches exist
+   - Remove all task worktrees
+   - Verify branches still accessible after cleanup
+
+7. **Stack branches linearly:**
+
+   Use `using-git-spice` skill to:
+   - Navigate to `{run-id}-main` worktree temporarily
+   - Check out first task branch
+   - Stack remaining branches linearly (task number order)
+   - Verify stack structure with `gs log short`
+   - Run integration tests on top of stack (if commands available)
+   - Return to main repo
+
+8. **MANDATORY: Use `requesting-code-review` skill to dispatch code review subagent:**
+
+   **Announce:** "Phase {phase-id} complete (parallel). Using requesting-code-review skill to validate implementation."
+
+   Use the Skill tool to invoke the `requesting-code-review` skill:
 
    ```
-   ROLE: Cleanup parallel worktrees and verify branches
-
-   TASK: Clean up worktrees for Phase {phase-id} and verify git-spice stack
-
-   WORKTREES TO CLEAN:
-   - ./.worktrees/{run-id}-task-{task-id-1} (branch: {run-id}-task-{task-id-1}-{short-name})
-   - ./.worktrees/{run-id}-task-{task-id-2} (branch: {run-id}-task-{task-id-2}-{short-name})
-   # ... etc
-
-   IMPLEMENTATION:
-
-   1. Verify all branches exist and are accessible:
-   ```bash
-   git branch -v | grep "{run-id}-task-{task-id-1}"
-   git branch -v | grep "{run-id}-task-{task-id-2}"
-   # Should see all task branches listed
+   Skill tool: requesting-code-review
    ```
 
-   2. Verify all worktrees have detached HEAD:
-   ```bash
-   git worktree list
-   # All worktrees should show (detached HEAD) not a branch name
-   ```
+   The code-reviewer subagent will:
+   - Review all task branches in this phase
+   - Check for integration issues between parallel tasks
+   - Verify constitution patterns followed
+   - Ensure no file conflicts or merge issues
+   - Validate code quality and consistency
+   - Report issues or approve
 
-   3. Remove all worktrees:
-   ```bash
-   git worktree remove ./.worktrees/{run-id}-task-{task-id-1}
-   git worktree remove ./.worktrees/{run-id}-task-{task-id-2}
-   # ... etc
-   ```
+9. **Address review feedback if needed:**
+   - If reviewer reports issues, fix them before proceeding
+   - Re-run code review after fixes
+   - Do NOT proceed to next phase until review passes
 
-   4. Verify branches are still accessible after cleanup:
-   ```bash
-   git branch -v | grep "^  {run-id}-task-"
-   # Should still see all task branches for this run
-   ```
-
-   5. Create linear stack from parallel branches:
-   ```bash
-   # Stack parallel branches linearly (task order: 2.1 -> 2.2 -> 2.3 etc)
-   # First task stays on base ({run-id}-main), subsequent tasks stack on previous
-   git checkout {run-id}-task-{task-id-2}-{short-name}
-   gs upstack onto {run-id}-task-{task-id-1}-{short-name}
-
-   # For 3+ parallel tasks, continue stacking:
-   # git checkout {run-id}-task-{task-id-3}-{short-name}
-   # gs upstack onto {run-id}-task-{task-id-2}-{short-name}
-   ```
-
-   6. Verify git-spice stack structure:
-   ```bash
-   gs log short
-   ```
-
-   Expected: Linear stack (task number order), all stacked on {run-id}-main:
-   ```
-   ┏━□ {run-id}-task-2-2-validation-schemas (on {run-id}-task-2-1-models-layer)
-       ┏━┻□ {run-id}-task-2-1-models-layer (on {run-id}-task-1-2-install-tsx)
-     ┏━┻□ {run-id}-task-1-2-install-tsx (on {run-id}-main)
-   ┏━┻□ {run-id}-main
-   main
-   ```
-
-   7. Run integration tests:
-   ```bash
-   # Check out the top of the stack (last parallel task)
-   git checkout {run-id}-task-{task-id-2}-{short-name}
-
-   # Run tests on the branch (includes all previous work)
-   pnpm test
-   pnpm lint
-   ```
-
-   8. Report:
-   - Confirmation all worktrees cleaned up
-   - List of branches created and verified
-   - Linear stack structure (task number order)
-   - Integration test results
-   - Any issues encountered
-   ```
-
-6. **After cleanup and linear stacking, use `requesting-code-review` skill:**
-
-   Dispatch code-reviewer subagent to review the entire phase:
-   - All task branches in this phase
-   - Check for integration issues
-   - Verify patterns followed
-   - Ensure no file conflicts
-   - Review quality and consistency
-
-7. **Address review feedback if needed**
-
-8. Phase is complete when code review passes, cleanup verified, and linear stack confirmed
+10. Phase is complete ONLY when:
+   - Code review passes (evidence from requesting-code-review skill)
+   - Cleanup verified (all worktrees removed)
+   - Linear stack confirmed (gs log short shows correct structure)
 
 ### Step 3: Verify Completion
 
@@ -509,19 +476,32 @@ After all phases execute successfully:
 
 This skill enforces verification BEFORE claiming work is done.
 
-**Required verifications:**
+**Required verifications (if commands detected):**
 ```bash
 # Run full test suite
-pnpm test
+if [ -n "$TEST_CMD" ]; then
+  $TEST_CMD || { echo "❌ Tests failed"; exit 1; }
+fi
 
 # Run linting
-pnpm lint
+if [ -n "$LINT_CMD" ]; then
+  $LINT_CMD || { echo "❌ Linting failed"; exit 1; }
+fi
 
 # Run production build
-pnpm build
+if [ -n "$BUILD_CMD" ]; then
+  $BUILD_CMD || { echo "❌ Build failed"; exit 1; }
+fi
 
-# Verify all pass
-echo "All checks passed - ready to complete"
+# Verify all detected checks passed
+echo "✅ All quality checks passed - ready to complete"
+```
+
+**If no commands detected:**
+```
+⚠️  No test/lint/build commands found in project.
+Add to CLAUDE.md or constitution/testing.md for automated quality gates.
+Proceeding without verification - manual review recommended.
 ```
 
 **Critical:** Evidence before assertions. Never claim "tests pass" without running them.
@@ -570,32 +550,42 @@ Use the `finishing-a-development-branch` skill to:
 
 ## Quality Checks
 
-✅ All tests passing
-✅ Biome linting clean
-✅ Build successful
+Quality checks are project-specific (detected from CLAUDE.md, constitution, or common patterns):
+
+✅ Tests passing (if `TEST_CMD` detected)
+✅ Linting clean (if `LINT_CMD` detected)
+✅ Formatting applied (if `FORMAT_CMD` detected)
+✅ Build successful (if `BUILD_CMD` detected)
+
+If no commands detected, quality gates are skipped with warning to user.
 ✅ {total-commits} commits across {branch-count} task branches
 
 ## Next Steps
 
-### Review Changes
+### Review Changes (from main repo)
 ```bash
-cd .worktrees/{run-id}-main       # Navigate to worktree if not already there
+# All these commands work from main repo root
 gs log short                      # View all branches and commits in stack
 gs log long                       # Detailed view with commit messages
-git diff main..HEAD               # See all changes in current stack
 git branch | grep "^  {run-id}-"  # List all branches for this run
+
+# To see changes in worktree:
+cd .worktrees/{run-id}-main
+git diff main..HEAD               # See all changes in current stack
+cd ../..                          # Return to main repo
 ```
 
-### Submit for Review
+### Submit for Review (from main repo)
 ```bash
-cd .worktrees/{run-id}-main       # Navigate to worktree
+# git-spice commands work from main repo
 gs stack submit  # Submits entire stack as PRs (per using-git-spice skill)
 ```
 
-### Or Continue with Dependent Feature
+### Or Continue with Dependent Feature (from worktree)
 ```bash
 cd .worktrees/{run-id}-main       # Navigate to worktree
 gs branch create  # Creates new branch stacked on current
+cd ../..                          # Return to main repo when done
 ```
 
 ### Cleanup Worktree (after PRs merged)
@@ -650,9 +640,10 @@ If one agent in parallel phase fails:
 ```bash
 git checkout {task-branch}
 # Debug and fix issue
-pnpm test
-pnpm format
-pnpm lint
+# Run quality checks (use project-specific commands)
+if [ -n "$TEST_CMD" ]; then $TEST_CMD; fi
+if [ -n "$FORMAT_CMD" ]; then $FORMAT_CMD; fi
+if [ -n "$LINT_CMD" ]; then $LINT_CMD; fi
 git add --all
 git commit -m "[{task-id}] Fix: {description}"
 ```

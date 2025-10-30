@@ -25,12 +25,14 @@ echo "RUN_ID: $RUN_ID"
 
 # Extract feature slug from the spec path
 # Path pattern: .../specs/{runId}-{feature-slug}/spec.md
-# Get parent directory name and remove runId prefix
+# Use sed to extract directory name without nested command substitution
 SPEC_PATH="{spec-path}"
-DIR_NAME=$(echo "$SPEC_PATH" | awk -F/ '{print $(NF-1)}')
+DIR_NAME=$(echo "$SPEC_PATH" | sed 's|.*/specs/||; s|/spec.md||')
 FEATURE_SLUG=$(echo "$DIR_NAME" | sed "s/^${RUN_ID}-//")
 echo "FEATURE_SLUG: $FEATURE_SLUG"
 ```
+
+**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains.
 
 **If RUN_ID not found:**
 Generate one now (for backwards compatibility with old specs):
@@ -41,6 +43,8 @@ TIMESTAMP=$(date +%s)
 RUN_ID=$(echo "{feature-name}-$TIMESTAMP" | shasum -a 256 | head -c 6)
 echo "Generated RUN_ID: $RUN_ID (spec missing runId)"
 ```
+
+**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains.
 
 **Spec Directory Pattern:**
 Specs follow the pattern: `specs/{run-id}-{feature-slug}/spec.md`
@@ -66,6 +70,8 @@ else
 fi
 ```
 
+**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains.
+
 **If worktree doesn't exist:**
 Error immediately with clear message:
 
@@ -85,65 +91,74 @@ Expected worktree: .worktrees/{run-id}-main/
 - Plan will be written to: `.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md`
 - No fallback to main repo (worktree is required)
 
-### Step 1: Invoke Task Decomposition Skill
+### Step 1: Dispatch Subagent for Task Decomposition
 
-Announce: "I'm using the Task Decomposition skill to create an execution plan."
+**Announce:** "Dispatching subagent to generate execution plan from spec."
 
-Use the `decomposing-tasks` skill to analyze the spec and create a plan.
+**IMPORTANT:** Delegate plan generation to a subagent to avoid context bloat. The subagent will read the spec, analyze tasks, and generate the plan in its isolated context.
 
-**What the skill does:**
+Use the Task tool with `general-purpose` subagent type:
 
-1. Reads the spec and extracts tasks from "Implementation Plan" section
-2. Validates task quality (no XL tasks, explicit files, acceptance criteria, proper chunking)
-3. Analyzes file dependencies between tasks
-4. Groups tasks into phases (sequential or parallel)
-5. Calculates execution time estimates with parallelization savings
-6. Generates plan.md in the spec directory
+```
+ROLE: Plan generation subagent for spectacular workflow
+
+TASK: Generate execution plan from feature specification
+
+SPEC_PATH: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
+RUN_ID: {run-id}
+FEATURE_SLUG: {feature-slug}
+
+IMPLEMENTATION:
+
+**Announce:** "I'm using the Task Decomposition skill to create an execution plan."
+
+Use the `decomposing-tasks` skill to analyze the spec and generate a plan.
+
+**The skill will:**
+
+1. Read the spec from SPEC_PATH above
+2. Extract or design tasks (handles specs with OR without Implementation Plan section)
+3. Validate task quality (no XL tasks, explicit files, proper chunking)
+4. Analyze file dependencies between tasks
+5. Group tasks into phases (sequential or parallel)
+6. Calculate execution time estimates with parallelization savings
+7. Generate plan.md in the spec directory
 
 **Critical validations:**
-
 - ❌ XL tasks (>8h) → Must split before planning
 - ❌ Missing files → Must specify exact paths
 - ❌ Missing acceptance criteria → Must add 3-5 criteria
-- ❌ Wildcard patterns (`src/**/*.ts`) → Must be explicit
+- ❌ Wildcard patterns → Must be explicit
 - ❌ Too many S tasks (>30%) → Bundle into thematic M/L tasks
 
-**Chunking Philosophy:**
-Tasks should be PR-sized, thematically coherent units - not mechanical file splits.
-
-- M (3-5h): Sweet spot - complete subsystem/layer/slice
-- L (5-7h): Major units - full UI layer, complete API surface
-- S (1-2h): Rare - only truly standalone work
-
-**If validation fails:**
-The skill will report issues and STOP. User must fix spec and re-run `/spectacular:plan`.
-
-**If validation passes:**
-The skill generates `specs/{run-id}-{feature-slug}/plan.md` with:
-
-- RUN_ID in frontmatter (from Step 0)
-- Feature slug in frontmatter
-- Phase grouping (sequential/parallel strategies)
-- Task dependencies and file analysis
-- Execution time estimates
-- Complete implementation details
+**Plan output location:**
+.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
 
 **Plan frontmatter must include:**
-
 ```yaml
 ---
-runId: { run-id }
-feature: { feature-slug }
-created: { YYYY-MM-DD }
+runId: {run-id}
+feature: {feature-slug}
+created: YYYY-MM-DD
 status: ready
 ---
 ```
 
-The runId and feature slug are extracted from the spec directory path: `specs/{run-id}-{feature-slug}/`
+**After plan generation:**
+Report back to orchestrator with:
+- Plan location
+- Summary of phases and tasks
+- Parallelization time savings
+- Any validation issues encountered
+
+If validation fails, report issues clearly so user can fix spec and re-run.
+```
+
+**Wait for subagent completion** before proceeding to Step 2.
 
 ### Step 2: Review Plan Output
 
-After skill completes, review the generated plan:
+After subagent completes, review the generated plan:
 
 ```bash
 cat specs/{run-id}-{feature-slug}/plan.md

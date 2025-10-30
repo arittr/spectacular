@@ -32,6 +32,8 @@ RUN_ID=$(echo "{feature-description}-$TIMESTAMP" | shasum -a 256 | head -c 6)
 echo "RUN_ID: $RUN_ID"
 ```
 
+**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains - this causes eval parse errors with command substitution.
+
 **Store for use in:**
 - Spec directory name: `specs/{run-id}-{feature-slug}/`
 - Spec frontmatter metadata

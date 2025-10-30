@@ -262,6 +262,28 @@ your-project/
 - [Superpowers](https://github.com/obra/superpowers)
 - [Git-Spice](https://github.com/abhinav/git-spice)
 
+## Troubleshooting
+
+### Spec command doesn't complete after brainstorming
+
+**Symptom:** `/spectacular:spec` runs brainstorming (Phases 1-3) but doesn't transition to spec generation. You see todos for Phase 4-6 (Design Documentation, Worktree Setup, Planning Handoff) and the command stops.
+
+**Cause:** The brainstorming skill (from superpowers) has extra phases for implementation that spectacular doesn't need. After Phase 3 (Design Presentation), spectacular should hand off to its own spec generation using the `writing-specs` skill, but occasionally this transition doesn't happen.
+
+**Solution:** Simply interrupt (Esc) and re-run the command:
+
+```bash
+# Interrupt the stuck command
+# Press Esc
+
+# Re-run the spec command with the same description
+/spectacular:spec "your feature description"
+```
+
+The second run will typically complete successfully. The brainstorming context from the first run helps inform the second attempt.
+
+**Why this works:** Spectacular only needs Phases 1-3 of brainstorming (Understanding, Exploration, Design Presentation). The command should then exit brainstorming and use its own spec format via the `writing-specs` skill. The re-run usually handles this transition correctly.
+
 ## Contributing
 
 Spectacular is designed to work with [superpowers](https://github.com/obra/superpowers). Consider contributing to both projects!

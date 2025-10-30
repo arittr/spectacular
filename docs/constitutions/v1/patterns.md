@@ -326,6 +326,55 @@ Only soften if:
 4. Verify it's actually better (not just easier)
 5. Update skill using writing-skills metaskill
 
+## Pattern 8: Version Management (Mandatory)
+
+**Rule:** ALWAYS use `./scripts/update-version.sh` to bump versions. NEVER edit version numbers manually.
+
+### The Process
+
+**When bumping version:**
+```bash
+./scripts/update-version.sh 2.0.0-alpha22    # Specify exact version
+```
+
+**Typical progression:**
+- Bug fixes: `2.0.0-alpha21` → `2.0.0-alpha22`
+- New features (pre-release): `2.0.0-alpha22` → `2.0.0-beta1`
+- Stable release: `2.0.0-beta1` → `2.0.0`
+
+**What happens automatically:**
+1. Updates `.claude-plugin/plugin.json` version
+2. Updates `.claude-plugin/marketplace.json` version
+3. Ensures consistency across both files
+
+### Why Mandatory
+
+**Manual version edits cause drift:**
+- `plugin.json` shows v2.0.0-alpha22
+- `marketplace.json` shows v2.0.0-alpha21
+- Plugin loading fails or shows wrong version
+
+**Script ensures:**
+- Semver format is valid
+- All version files stay in sync
+- No manual mistakes
+
+### Anti-pattern
+
+❌ "Just editing plugin.json, it's a small change"
+❌ "I'll update marketplace.json manually later"
+❌ "The script is overkill for a version bump"
+
+**Why wrong:** Even "small" manual edits create inconsistency. Script overhead is ~1 second. Version drift debugging takes hours.
+
+### Rationalization Table
+
+| Rationalization | Why It's Wrong | What to Do Instead |
+|----------------|----------------|-------------------|
+| "Just a quick version bump" | Manual edits = guaranteed drift | Use `./scripts/update-version.sh 2.0.0-alphaX` |
+| "I'll sync manually after" | You will forget | Script does it atomically |
+| "Script might not exist yet" | Then create it first | Never have manual version bumps |
+
 ## Summary: Mandatory Workflow
 
 **For ALL spectacular skill/command work:**
@@ -337,5 +386,6 @@ Only soften if:
 5. ✅ Require TodoWrite for sequential steps
 6. ✅ Require "Announce:" instruction in every skill
 7. ✅ Do NOT soften rules without RED-GREEN-REFACTOR validation
+8. ✅ Use `./scripts/update-version.sh` for all version bumps
 
 **Violating these patterns = skills that don't work under pressure.**
