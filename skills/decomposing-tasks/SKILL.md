@@ -121,11 +121,21 @@ If you're creating S tasks, ask:
 
 ## The Process
 
-### Step 1: Read Spec and Design Chunks
+### Step 1: Read Spec and Extract/Design Tasks
 
-Read the spec file and extract all tasks from the "Implementation Plan" section.
+Read the spec file and extract tasks. The spec may provide tasks in two ways:
 
-For each task, capture:
+**Option A: Spec has "Implementation Plan" section** (structured task breakdown)
+- Extract tasks directly from this section
+- Each task should have: ID, description, files, complexity, acceptance criteria
+
+**Option B: Spec has no "Implementation Plan"** (lean spec - requirements only)
+- Analyze the requirements and design task breakdown yourself
+- Look at: Functional Requirements, Architecture section, Files to Create/Modify
+- Design PR-sized chunks following the chunking philosophy above
+- Create tasks that implement all requirements
+
+For each task (extracted or designed), capture:
 
 - **Task ID** (from heading)
 - **Description** (what to implement)
@@ -457,17 +467,25 @@ Execute plan:
 
 ## Error Handling
 
-### Spec Has No Tasks
+### Spec Has Insufficient Information
 
-If spec doesn't have "Implementation Plan" section:
+If spec has neither "Implementation Plan" nor enough detail to design tasks:
 
 ```
 
-❌ Cannot decompose - spec has no tasks
+❌ Cannot decompose - spec lacks implementation details
 
-The spec must have an "Implementation Plan" section with tasks.
+The spec must have either:
+- An "Implementation Plan" section with tasks, OR
+- Sufficient requirements and architecture details to design tasks
 
-Use /spec-feature to generate a complete spec first.
+Current spec has:
+- Functional Requirements: [YES/NO]
+- Architecture section: [YES/NO]
+- Files to create/modify: [YES/NO]
+
+Add more implementation details to the spec, then re-run:
+/spectacular:plan @specs/{run-id}-{feature-slug}/spec.md
 
 ```
 
