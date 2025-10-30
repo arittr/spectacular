@@ -199,62 +199,70 @@ For each phase in the plan, execute based on strategy:
 
 For phases where tasks must run in order:
 
-**Execute tasks sequentially - each in its own worktree:**
+**OPTIMIZATION: Use single worktree for entire phase (not per-task)**
 
-1. For each task in the phase:
+Sequential tasks build on each other, so they can share a worktree. This saves ~2-3 minutes per task from worktree creation/destruction and dependency installs.
 
-   **A. Create task worktree:**
+1. **Create phase worktree once:**
 
-   Use the `using-git-worktrees` skill to:
-   - Create worktree at `.worktrees/{run-id}-task-{task-id}`
+   Use `using-git-worktrees` skill to:
+   - Create worktree at `.worktrees/{run-id}-phase-{phase-id}`
    - Branch from current branch in `{run-id}-main` worktree
    - Ensure worktree is created at same level as `{run-id}-main` (not nested)
-   - Stay in main repo context (don't cd into worktree yet)
 
-   **B. Spawn subagent for task implementation:**
+2. **Run project setup once:**
+
+   In the phase worktree, run initial setup:
+   - Check if package.json changed: `git diff --quiet HEAD package.json package-lock.json`
+   - If changed: Run install (e.g., `bun install`, `npm install`)
+   - If unchanged: Skip install (save 30s-1m per task)
+
+3. **For each task in the phase, spawn subagent:**
 
    ```
-   ROLE: Implement Task {task-id} in isolated worktree
+   ROLE: Implement Task {task-id} in shared phase worktree
 
-   WORKTREE: .worktrees/{run-id}-task-{task-id}
+   WORKTREE: .worktrees/{run-id}-phase-{phase-id}
    TASK: {task-name}
+   CURRENT BRANCH: {current-branch-in-worktree}
 
    INSTRUCTIONS:
 
-   1. Navigate to your worktree (absolute path from repo root)
+   1. You're already in the phase worktree
 
-   2. Read the task from plan: specs/{runId}-{slug}/plan.md
+   2. Read task from plan: specs/{runId}-{slug}/plan.md
 
    3. Read constitution: docs/constitutions/current/
 
    4. Implement the task following constitution patterns
 
    5. Run quality checks (check CLAUDE.md for commands)
+      - Skip dependency install (already done)
+      - Run tests/lint/build
 
    6. Use `using-git-spice` skill to:
       - Create branch: {run-id}-task-{task-id}-{short-name}
       - Commit with message: "[Task {task-id}] {task-name}"
       - Include acceptance criteria in commit body
-      - Detach HEAD when done
+      - Stay on new branch (next task will build on it)
 
    7. Report completion (files changed, branch created, tests passing)
 
    CRITICAL:
-   - Work in your worktree only
-   - Detach HEAD before finishing
+   - Work in phase worktree (shared with other phase tasks)
+   - Stay on your branch when done (next task builds on it)
    - Do NOT clean up worktree
    ```
 
-   **C. Clean up task worktree:**
+4. **After ALL tasks complete, clean up phase worktree:**
 
-   Use `using-git-worktrees` skill to remove the worktree after verifying branch was created.
+   Use `using-git-worktrees` skill to remove `.worktrees/{run-id}-phase-{phase-id}`
 
-2. After ALL tasks in phase complete, stack branches:
+5. **Stack branches in main worktree:**
 
    Use `using-git-spice` skill to:
    - Navigate to `{run-id}-main` worktree temporarily
-   - Check out first task branch
-   - Stack subsequent tasks linearly (task order)
+   - Track and stack all phase branches linearly (task order)
    - Verify stack with `gs log short`
    - Return to main repo
 
@@ -302,7 +310,14 @@ For phases where tasks are independent:
    - Ensure all created at same level (not nested)
    - Stay in main repo context
 
-3. **Spawn parallel agents** (CRITICAL: Single message with multiple Task tools):
+3. **Run project setup in each worktree (if needed):**
+
+   For each task worktree:
+   - Check if package.json changed: `git diff --quiet HEAD package.json package-lock.json`
+   - If changed: Run install (e.g., `bun install`, `npm install`)
+   - If unchanged: Skip install (save 30s-1m per task)
+
+4. **Spawn parallel agents** (CRITICAL: Single message with multiple Task tools):
 
    For each task, spawn agent with this prompt:
 
@@ -323,6 +338,8 @@ For phases where tasks are independent:
    4. Implement the task following constitution patterns
 
    5. Run quality checks (check CLAUDE.md for commands)
+      - Dependency install may have been skipped (already done)
+      - Run tests/lint/build
 
    6. Use `using-git-spice` skill to:
       - Create branch: {run-id}-task-{task-id}-{short-name}
@@ -339,17 +356,17 @@ For phases where tasks are independent:
    - Do NOT touch files from other tasks
    ```
 
-4. **Wait for all parallel agents to complete**
+5. **Wait for all parallel agents to complete**
    (Agents work independently, orchestrator collects results)
 
-5. **Clean up parallel worktrees:**
+6. **Clean up parallel worktrees:**
 
    Use `using-git-worktrees` skill to:
    - Verify all task branches exist
    - Remove all task worktrees
    - Verify branches still accessible after cleanup
 
-6. **Stack branches linearly:**
+7. **Stack branches linearly:**
 
    Use `using-git-spice` skill to:
    - Navigate to `{run-id}-main` worktree temporarily
@@ -359,7 +376,7 @@ For phases where tasks are independent:
    - Run integration tests on top of stack (if commands available)
    - Return to main repo
 
-6. **MANDATORY: Use `requesting-code-review` skill to dispatch code review subagent:**
+8. **MANDATORY: Use `requesting-code-review` skill to dispatch code review subagent:**
 
    **Announce:** "Phase {phase-id} complete (parallel). Using requesting-code-review skill to validate implementation."
 
@@ -377,12 +394,12 @@ For phases where tasks are independent:
    - Validate code quality and consistency
    - Report issues or approve
 
-7. **Address review feedback if needed:**
+9. **Address review feedback if needed:**
    - If reviewer reports issues, fix them before proceeding
    - Re-run code review after fixes
    - Do NOT proceed to next phase until review passes
 
-8. Phase is complete ONLY when:
+10. Phase is complete ONLY when:
    - Code review passes (evidence from requesting-code-review skill)
    - Cleanup verified (all worktrees removed)
    - Linear stack confirmed (gs log short shows correct structure)
