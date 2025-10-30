@@ -1,55 +1,31 @@
 #!/bin/bash
 
-# Spectacular session start hook
-# Provides context about spec-anchored development workflows
+# Session-start hook for spectacular plugin
+# Injects using-spectacular skill into every Claude Code session
 
-# Check if superpowers is installed
-SUPERPOWERS_MISSING=""
-if [ ! -d ~/.claude/plugins/cache/superpowers ]; then
-  SUPERPOWERS_MISSING="true"
+set -euo pipefail
+
+# Get the directory where this script lives
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Path to the using-spectacular skill
+SKILL_FILE="$PLUGIN_DIR/skills/using-spectacular/SKILL.md"
+
+# Check if skill file exists
+if [ ! -f "$SKILL_FILE" ]; then
+  echo "{\"hookEventName\": \"SessionStart\", \"additionalContext\": \"⚠️  using-spectacular skill not found at $SKILL_FILE\"}"
+  exit 0
 fi
 
-# Check if in a project with specs/ directory (active spectacular usage)
-IN_SPECTACULAR_PROJECT=""
-if [ -d "specs" ]; then
-  IN_SPECTACULAR_PROJECT="true"
-fi
+# Read the skill file and use jq to properly escape for JSON
+# jq -Rs reads the entire file as a single string and escapes it properly
+SKILL_CONTENT=$(cat "$SKILL_FILE" | jq -Rs .)
 
-# Build context message
-CONTEXT=""
-
-if [ -n "$SUPERPOWERS_MISSING" ]; then
-  CONTEXT="⚠️  **Spectacular requires superpowers plugin**
-
-Spectacular extends superpowers with spec-anchored development workflows.
-
-Install superpowers:
-\`\`\`bash
-/plugin install superpowers@superpowers-marketplace
-\`\`\`
-
-After installing superpowers, you can use spectacular commands."
-else
-  # Superpowers is installed - provide workflow reminder
-  if [ -n "$IN_SPECTACULAR_PROJECT" ]; then
-    CONTEXT="📋 **Spectacular workflow active**
-
-Detected \`specs/\` directory. Remember the workflow:
-
-1. \`/spectacular:spec\` - Generate specification
-2. \`/spectacular:plan\` - Decompose into tasks
-3. \`/spectacular:execute\` - Run with parallel orchestration
-
-All work follows \`@docs/constitutions/current/\` if present."
-  fi
-fi
-
-# Only output if there's context to provide
-if [ -n "$CONTEXT" ]; then
-  cat <<EOF
+# Output JSON with the skill content injected as additional context
+cat <<EOF
 {
-  "event": "SessionStart",
-  "context": $(echo "$CONTEXT" | jq -Rs .)
+  "hookEventName": "SessionStart",
+  "additionalContext": $SKILL_CONTENT
 }
 EOF
-fi
