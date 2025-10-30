@@ -157,7 +157,28 @@ Read the plan file and extract:
 - Feature name
 - All phases (with strategy: sequential or parallel)
 - All tasks within each phase
-- Task details (files, dependencies, acceptance criteria)
+
+**For each task, extract and format:**
+- Task ID and name
+- Files to modify (explicit paths)
+- Acceptance criteria (bullet points)
+- Dependencies (which tasks must complete first)
+
+**Store extracted task info for subagent prompts** (saves ~1000 tokens per subagent):
+
+```
+Task 4.2:
+  Name: Integrate prompts module into generator
+  Files:
+    - src/generator.ts
+    - src/types.ts
+  Acceptance Criteria:
+    - Import PromptService from prompts module
+    - Replace manual prompt construction with PromptService.getCommitPrompt()
+    - Update tests to mock PromptService
+    - All tests pass
+  Dependencies: Task 4.1 (fallback logic removed)
+```
 
 Verify plan structure:
 - ✅ Has phases with clear strategies
@@ -223,30 +244,46 @@ Sequential tasks build on each other, so they can share a worktree. This saves ~
    ROLE: Implement Task {task-id} in shared phase worktree
 
    WORKTREE: .worktrees/{run-id}-phase-{phase-id}
-   TASK: {task-name}
    CURRENT BRANCH: {current-branch-in-worktree}
+
+   TASK: {task-name}
+
+   FILES TO MODIFY:
+   {extracted-files-list}
+
+   ACCEPTANCE CRITERIA:
+   {extracted-acceptance-criteria}
+
+   DEPENDENCIES: {extracted-dependencies}
 
    INSTRUCTIONS:
 
-   1. You're already in the phase worktree
+   1. Navigate to phase worktree (you're working here with other phase tasks)
 
-   2. Read task from plan: specs/{runId}-{slug}/plan.md
+   2. Read constitution: docs/constitutions/current/
+      - architecture.md - Project structure and boundaries
+      - patterns.md - Mandatory patterns to follow
+      - tech-stack.md - Approved libraries and versions
 
-   3. Read constitution: docs/constitutions/current/
+   3. Implement task following constitution patterns
+      - Modify the files listed above
+      - Meet all acceptance criteria
+      - Follow architecture/patterns from constitution
 
-   4. Implement the task following constitution patterns
-
-   5. Run quality checks (check CLAUDE.md for commands)
-      - Skip dependency install (already done)
+   4. Run quality checks (check CLAUDE.md for commands)
+      - Dependency install already done (skip it)
       - Run tests/lint/build
 
-   6. Use `using-git-spice` skill to:
+   5. Use `using-git-spice` skill to:
       - Create branch: {run-id}-task-{task-id}-{short-name}
       - Commit with message: "[Task {task-id}] {task-name}"
       - Include acceptance criteria in commit body
       - Stay on new branch (next task will build on it)
 
-   7. Report completion (files changed, branch created, tests passing)
+   6. Report completion (files changed, branch created, tests passing)
+
+   REFERENCE (if you need more context):
+   - Full plan: specs/{runId}-{slug}/plan.md
 
    CRITICAL:
    - Work in phase worktree (shared with other phase tasks)
@@ -325,29 +362,45 @@ For phases where tasks are independent:
    ROLE: Implement Task {task-id} in isolated worktree (parallel execution)
 
    WORKTREE: .worktrees/{run-id}-task-{task-id}
+
    TASK: {task-name}
+
+   FILES TO MODIFY:
+   {extracted-files-list}
+
+   ACCEPTANCE CRITERIA:
+   {extracted-acceptance-criteria}
+
+   DEPENDENCIES: {extracted-dependencies}
 
    INSTRUCTIONS:
 
    1. Navigate to your worktree (absolute path from repo root)
 
-   2. Read the task from plan: specs/{runId}-{slug}/plan.md
+   2. Read constitution: docs/constitutions/current/
+      - architecture.md - Project structure and boundaries
+      - patterns.md - Mandatory patterns to follow
+      - tech-stack.md - Approved libraries and versions
 
-   3. Read constitution: docs/constitutions/current/
+   3. Implement task following constitution patterns
+      - Modify the files listed above
+      - Meet all acceptance criteria
+      - Follow architecture/patterns from constitution
 
-   4. Implement the task following constitution patterns
-
-   5. Run quality checks (check CLAUDE.md for commands)
+   4. Run quality checks (check CLAUDE.md for commands)
       - Dependency install may have been skipped (already done)
       - Run tests/lint/build
 
-   6. Use `using-git-spice` skill to:
+   5. Use `using-git-spice` skill to:
       - Create branch: {run-id}-task-{task-id}-{short-name}
       - Commit with message: "[Task {task-id}] {task-name}"
       - Include acceptance criteria in commit body
       - Detach HEAD when done
 
-   7. Report completion (files changed, branch created, tests passing)
+   6. Report completion (files changed, branch created, tests passing)
+
+   REFERENCE (if you need more context):
+   - Full plan: specs/{runId}-{slug}/plan.md
 
    CRITICAL:
    - Work in your worktree only (other tasks running in parallel)
