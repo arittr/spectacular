@@ -335,33 +335,55 @@ Sequential tasks build on each other, so they can share a worktree. This saves ~
 
 For phases where tasks are independent:
 
+**CRITICAL: Parallel tasks MUST use isolated worktrees. DO NOT skip worktree creation.**
+
 1. **Verify independence** (from plan's dependency analysis):
    - Confirm no file overlaps between tasks
    - Check dependencies are satisfied
 
-2. **Create all task worktrees:**
+2. **MANDATORY: Create isolated worktree for EACH task BEFORE spawning agents**
 
-   Use `using-git-worktrees` skill to create worktrees for all parallel tasks:
-   - Create `.worktrees/{run-id}-task-{task-id}` for each task
-   - Branch from current branch in `{run-id}-main` worktree
-   - Ensure all created at same level (not nested)
-   - Stay in main repo context
+   **You MUST create worktrees first. Do NOT spawn agents until all worktrees exist.**
 
-3. **Run project setup in each worktree (if needed):**
+   For each task in this phase:
 
-   For each task worktree:
-   - Check if package.json changed: `git diff --quiet HEAD package.json package-lock.json`
-   - If changed: Run install (e.g., `bun install`, `npm install`)
-   - If unchanged: Skip install (save 30s-1m per task)
+   a) Get base branch from main worktree:
+   ```bash
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+   BASE_BRANCH=$(git -C "$REPO_ROOT/.worktrees/{run-id}-main" branch --show-current)
+   ```
 
-4. **Spawn parallel agents** (CRITICAL: Single message with multiple Task tools):
+   b) Create task worktree:
+   ```bash
+   git worktree add --detach "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}" "$BASE_BRANCH"
+   ```
+
+   c) Check if install needed:
+   ```bash
+   cd "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}"
+   if ! git diff --quiet HEAD package.json package-lock.json; then
+     bun install  # or npm install, pip install, etc
+   fi
+   cd "$REPO_ROOT"
+   ```
+
+   **Verify all worktrees created:**
+   ```bash
+   git worktree list | grep "{run-id}-task-"
+   ```
+
+   You should see one worktree per parallel task.
+
+3. **AFTER all worktrees exist, spawn parallel agents:**
+
+   **CRITICAL: Single message with multiple Task tools**
 
    For each task, spawn agent with this prompt:
 
    ```
-   ROLE: Implement Task {task-id} in isolated worktree (parallel execution)
+   ROLE: Implement Task {task-id} in ISOLATED worktree
 
-   WORKTREE: .worktrees/{run-id}-task-{task-id}
+   WORKTREE: .worktrees/{run-id}-task-{task-id} ← YOUR worktree (not {run-id}-main!)
 
    TASK: {task-name}
 
@@ -373,9 +395,18 @@ For phases where tasks are independent:
 
    DEPENDENCIES: {extracted-dependencies}
 
+   CRITICAL FIRST STEP - VERIFY ISOLATION:
+   ```bash
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+   cd "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}"
+   pwd  # MUST show: .worktrees/{run-id}-task-{task-id}
+   ```
+
+   If pwd shows anything else (like {run-id}-main), STOP and report error.
+
    INSTRUCTIONS:
 
-   1. Navigate to your worktree (absolute path from repo root)
+   1. You're in isolated worktree: .worktrees/{run-id}-task-{task-id}
 
    2. Read constitution: docs/constitutions/current/
       - architecture.md - Project structure and boundaries
