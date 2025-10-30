@@ -345,34 +345,14 @@ For phases where tasks are independent:
 
    **You MUST create worktrees first. Do NOT spawn agents until all worktrees exist.**
 
-   For each task in this phase:
+   Use `using-git-worktrees` skill to:
+   - Get base branch from `{run-id}-main` worktree
+   - Create worktree for each parallel task: `.worktrees/{run-id}-task-{task-id}`
+   - Branch from current branch in `{run-id}-main` worktree
+   - Verify all worktrees created (one per parallel task)
+   - Optionally run dependency installs if package files changed
 
-   a) Get base branch from main worktree:
-   ```bash
-   REPO_ROOT=$(git rev-parse --show-toplevel)
-   BASE_BRANCH=$(git -C "$REPO_ROOT/.worktrees/{run-id}-main" branch --show-current)
-   ```
-
-   b) Create task worktree:
-   ```bash
-   git worktree add --detach "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}" "$BASE_BRANCH"
-   ```
-
-   c) Check if install needed:
-   ```bash
-   cd "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}"
-   if ! git diff --quiet HEAD package.json package-lock.json; then
-     bun install  # or npm install, pip install, etc
-   fi
-   cd "$REPO_ROOT"
-   ```
-
-   **Verify all worktrees created:**
-   ```bash
-   git worktree list | grep "{run-id}-task-"
-   ```
-
-   You should see one worktree per parallel task.
+   **Announce:** "Created {count} isolated worktrees for parallel execution"
 
 3. **AFTER all worktrees exist, spawn parallel agents:**
 
