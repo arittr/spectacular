@@ -50,12 +50,12 @@ echo "Generated RUN_ID: $RUN_ID (plan missing runId)"
 
 **Announce:** "Executing with RUN_ID: {run-id}"
 
-### Step 0b: Switch to Worktree Base
+### Step 0b: Verify Worktree Exists
 
-**After extracting RUN_ID, switch to the worktree context:**
+**After extracting RUN_ID, verify the worktree exists:**
 
 ```bash
-# Get absolute repo root
+# Get absolute repo root (stay in main repo, don't cd into worktree)
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
 # Verify worktree exists
@@ -65,14 +65,15 @@ if [ ! -d "$REPO_ROOT/.worktrees/${RUN_ID}-main" ]; then
   exit 1
 fi
 
-# Switch to worktree directory using absolute path
-cd "$REPO_ROOT/.worktrees/${RUN_ID}-main"
-pwd  # Confirm we're in worktree
+# Verify it's a valid worktree
+git worktree list | grep "${RUN_ID}-main"
 ```
 
-**All subsequent operations happen in this worktree directory.**
+**IMPORTANT: Orchestrator stays in main repo. All worktree operations use `git -C .worktrees/{run-id}-main` or absolute paths.**
 
-**Announce:** "Working in worktree: .worktrees/{run-id}-main/"
+**This ensures task worktrees are created at the same level as {run-id}-main, not nested inside it.**
+
+**Announce:** "Verified worktree exists: .worktrees/{run-id}-main/"
 
 ### Step 0c: Check for Existing Work
 
@@ -85,13 +86,19 @@ TASK: Determine if work has already started and identify resume point
 
 IMPLEMENTATION:
 
-1. Check current state:
+1. Check current state in the main worktree:
 ```bash
-git branch --show-current
-git log --oneline --grep="\[Task" -20
+# Get repo root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Check state in main worktree using git -C
+git -C "$REPO_ROOT/.worktrees/{run-id}-main" branch --show-current
+git -C "$REPO_ROOT/.worktrees/{run-id}-main" log --oneline --grep="\[Task" -20
+git -C "$REPO_ROOT/.worktrees/{run-id}-main" status
+
+# Check git-spice stack (from main repo)
 gs ls
 gs branch tree
-git status
 
 # Filter branches for this RUN_ID
 git branch | grep "^  {run-id}-task-"
@@ -104,7 +111,7 @@ git branch | grep "^  {run-id}-task-"
    - Determine which phase and task to resume from
 
 3. Report:
-   - Current branch name
+   - Current branch name in main worktree
    - List of completed tasks (from commit messages)
    - List of existing task branches
    - Resume point (next incomplete task)
@@ -122,7 +129,7 @@ git branch | grep "^  {run-id}-task-"
 **If no existing work:**
 - Continue to Step 1 (Read and Parse Plan)
 
-**Note:** All git operations in this step happen relative to the `{runId}-main` branch, not the main repo's current branch.
+**Note:** All git operations check state in `{runId}-main` worktree using `git -C` or absolute paths.
 
 ### Step 1: Read and Parse Plan
 
@@ -145,10 +152,13 @@ Verify plan structure:
 This avoids every subagent reading the same files, significantly reducing file I/O and context bloat.
 
 ```bash
-# Read constitution files in the worktree
-ARCH=$(cat docs/constitutions/current/architecture.md)
-PATTERNS=$(cat docs/constitutions/current/patterns.md)
-TECH_STACK=$(cat docs/constitutions/current/tech-stack.md)
+# Get repo root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Read constitution files from the main worktree
+ARCH=$(cat "$REPO_ROOT/.worktrees/{run-id}-main/docs/constitutions/current/architecture.md")
+PATTERNS=$(cat "$REPO_ROOT/.worktrees/{run-id}-main/docs/constitutions/current/patterns.md")
+TECH_STACK=$(cat "$REPO_ROOT/.worktrees/{run-id}-main/docs/constitutions/current/tech-stack.md")
 ```
 
 **Detect project-specific quality check commands:**
@@ -189,14 +199,13 @@ For phases where tasks must run in order:
    **A. Create task worktree:**
 
    ```bash
-   # Get absolute repo root
+   # Get absolute repo root (we're in main repo, not a worktree)
    REPO_ROOT=$(git rev-parse --show-toplevel)
 
-   # Switch to {run-id}-main to get base branch
-   cd "$REPO_ROOT/.worktrees/{run-id}-main"
-   BASE_BRANCH=$(git branch --show-current)
+   # Get current branch in main worktree (without cd'ing into it)
+   BASE_BRANCH=$(git -C "$REPO_ROOT/.worktrees/{run-id}-main" branch --show-current)
 
-   # Create worktree for this task
+   # Create worktree for this task (from main repo context, so it's created at same level)
    git worktree add --detach "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}" "$BASE_BRANCH"
    git worktree list
    ```
@@ -355,7 +364,7 @@ For phases where tasks must run in order:
 2. After ALL tasks in phase complete, stack branches in {run-id}-main:
 
    ```bash
-   # Get repo root and switch to main worktree
+   # Get repo root and temporarily switch to main worktree for stacking
    REPO_ROOT=$(git rev-parse --show-toplevel)
    cd "$REPO_ROOT/.worktrees/{run-id}-main"
 
@@ -369,6 +378,9 @@ For phases where tasks must run in order:
 
    # Verify stack structure
    gs log short
+
+   # Return to main repo
+   cd "$REPO_ROOT"
    ```
 
 3. After branches are stacked:
@@ -422,23 +434,20 @@ For phases where tasks are independent:
 
    IMPLEMENTATION:
 
-   1. Switch to {run-id}-main worktree and get base branch:
+   1. Get base branch from main worktree (without cd'ing into it):
    ```bash
-   # Get absolute repo root
+   # Get absolute repo root (stay in main repo, don't cd into worktree)
    REPO_ROOT=$(git rev-parse --show-toplevel)
 
-   # Switch to the main worktree for this run
-   cd "$REPO_ROOT/.worktrees/{run-id}-main"
-
-   # Get current branch (should be {run-id}-main or a task branch stacked on it)
-   CURRENT_BRANCH=$(git branch --show-current)
+   # Get current branch in main worktree using git -C (avoid cd)
+   CURRENT_BRANCH=$(git -C "$REPO_ROOT/.worktrees/{run-id}-main" branch --show-current)
    echo "Base branch: $CURRENT_BRANCH"
    ```
 
-   2. Create worktrees using absolute paths (one per parallel task):
+   2. Create worktrees at same level (one per parallel task):
    ```bash
    # Each parallel task gets its own worktree branching from current branch
-   # Use absolute paths to avoid issues with working directory
+   # We're in main repo context, so worktrees are created at same level as {run-id}-main
 
    # For each parallel task, create a worktree (namespaced by RUN_ID)
    git worktree add --detach "$REPO_ROOT/.worktrees/{run-id}-task-{task-id-1}" "$CURRENT_BRANCH"
@@ -667,15 +676,12 @@ For phases where tasks are independent:
    # Should still see all task branches for this run
    ```
 
-   5. Switch to {run-id}-main worktree to create linear stack:
+   5. Create linear stack from parallel branches (in main worktree):
    ```bash
-   # Switch to main worktree where we'll stack all branches
+   # Temporarily cd into main worktree for stacking operations
+   # (git-spice needs to be run from within a worktree)
    cd "$REPO_ROOT/.worktrees/{run-id}-main"
-   pwd  # Verify we're in the main worktree
-   ```
 
-   6. Create linear stack from parallel branches:
-   ```bash
    # Stack parallel branches linearly (task order: 2.1 -> 2.2 -> 2.3 etc)
    # First task stays on base, subsequent tasks stack on previous
    git checkout {run-id}-task-{task-id-1}-{short-name}
@@ -689,7 +695,7 @@ For phases where tasks are independent:
    # gs upstack onto {run-id}-task-{task-id-2}-{short-name}
    ```
 
-   7. Verify git-spice stack structure:
+   6. Verify git-spice stack structure:
    ```bash
    gs log short
    ```
@@ -703,19 +709,26 @@ For phases where tasks are independent:
    main
    ```
 
-   8. Run integration tests (if commands detected):
+   7. Run integration tests (if commands detected):
    ```bash
-   # Check out the top of the stack (last parallel task)
-   git checkout {run-id}-task-{task-id-2}-{short-name}
+   # Already in main worktree from previous step
+   # Check out the top of the stack (last parallel task) if not already there
+   CURRENT=$(git branch --show-current)
+   if [ "$CURRENT" != "{run-id}-task-{task-id-2}-{short-name}" ]; then
+     git checkout {run-id}-task-{task-id-2}-{short-name}
+   fi
 
    # Run tests on the branch (includes all previous work)
    if [ -n "$TEST_CMD" ]; then $TEST_CMD; fi
    if [ -n "$LINT_CMD" ]; then $LINT_CMD; fi
+
+   # Return to main repo
+   cd "$REPO_ROOT"
    ```
 
    If no test commands found, verify manually or skip with warning.
 
-   9. Report:
+   8. Report:
    - Confirmation all worktrees cleaned up
    - List of branches created and verified
    - Linear stack structure (task number order)
@@ -845,25 +858,30 @@ If no commands detected, quality gates are skipped with warning to user.
 
 ## Next Steps
 
-### Review Changes
+### Review Changes (from main repo)
 ```bash
-cd .worktrees/{run-id}-main       # Navigate to worktree if not already there
+# All these commands work from main repo root
 gs log short                      # View all branches and commits in stack
 gs log long                       # Detailed view with commit messages
-git diff main..HEAD               # See all changes in current stack
 git branch | grep "^  {run-id}-"  # List all branches for this run
+
+# To see changes in worktree:
+cd .worktrees/{run-id}-main
+git diff main..HEAD               # See all changes in current stack
+cd ../..                          # Return to main repo
 ```
 
-### Submit for Review
+### Submit for Review (from main repo)
 ```bash
-cd .worktrees/{run-id}-main       # Navigate to worktree
+# git-spice commands work from main repo
 gs stack submit  # Submits entire stack as PRs (per using-git-spice skill)
 ```
 
-### Or Continue with Dependent Feature
+### Or Continue with Dependent Feature (from worktree)
 ```bash
 cd .worktrees/{run-id}-main       # Navigate to worktree
 gs branch create  # Creates new branch stacked on current
+cd ../..                          # Return to main repo when done
 ```
 
 ### Cleanup Worktree (after PRs merged)
