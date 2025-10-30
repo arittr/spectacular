@@ -1,7 +1,7 @@
 {
   "name": "spectacular",
   "description": "Spectacular skills/commands library for spec-anchored development and parallel task execution",
-  "version": "2.0.0-alpha32",
+  "version": "2.0.0-alpha33",
   "author": {
     "name": "Drew Ritter",
     "email": "drew@ritter.dev"
