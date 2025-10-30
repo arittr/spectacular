@@ -55,15 +55,18 @@ echo "Generated RUN_ID: $RUN_ID (plan missing runId)"
 **After extracting RUN_ID, switch to the worktree context:**
 
 ```bash
+# Get absolute repo root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
 # Verify worktree exists
-if [ ! -d ".worktrees/${RUN_ID}-main" ]; then
+if [ ! -d "$REPO_ROOT/.worktrees/${RUN_ID}-main" ]; then
   echo "❌ Error: Worktree not found at .worktrees/${RUN_ID}-main"
   echo "Run /spectacular:spec first to create the workspace."
   exit 1
 fi
 
-# Switch to worktree directory
-cd .worktrees/${RUN_ID}-main
+# Switch to worktree directory using absolute path
+cd "$REPO_ROOT/.worktrees/${RUN_ID}-main"
 pwd  # Confirm we're in worktree
 ```
 
@@ -179,30 +182,55 @@ For each phase in the plan, execute based on strategy:
 
 For phases where tasks must run in order:
 
-**Execute tasks sequentially with stacked branches:**
+**Execute tasks sequentially - each in its own worktree:**
 
 1. For each task in the phase:
 
-   **Spawn subagent for task implementation** (use Task tool):
+   **A. Create task worktree:**
+
+   ```bash
+   # Get absolute repo root
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+
+   # Switch to {run-id}-main to get base branch
+   cd "$REPO_ROOT/.worktrees/{run-id}-main"
+   BASE_BRANCH=$(git branch --show-current)
+
+   # Create worktree for this task
+   git worktree add --detach "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}" "$BASE_BRANCH"
+   git worktree list
+   ```
+
+   **B. Spawn subagent for task implementation** (use Task tool):
 
    ```
-   ROLE: You are implementing Task {task-id}.
+   ROLE: You are implementing Task {task-id} in an isolated worktree.
 
    TASK: {task-name}
-   CURRENT BRANCH: {current-branch}
-   WORKTREE: .worktrees/{run-id}-main
+   WORKTREE: .worktrees/{run-id}-task-{task-id}
+   BASE BRANCH: {base-branch}
 
-   CRITICAL - CONTEXT MANAGEMENT:
-   You are a subagent with isolated context. Complete this task independently.
-   You are working in the {run-id}-main worktree, not the main repo.
+   CRITICAL - WORKTREE ISOLATION:
+   You are working in an isolated git worktree. This means:
+   - You have your own working directory separate from other tasks
+   - You MUST cd into your worktree FIRST before any operations
+   - You are branching from {base-branch}
+   - When done, report completion and do NOT clean up worktree
 
-   IMPLEMENTATION:
-
-   1. Verify you're in the worktree and on the correct branch:
+   SETUP (MANDATORY FIRST STEP):
    ```bash
-   pwd  # Should be .worktrees/{run-id}-main
-   git branch --show-current  # Should be {current-branch}
+   # Get absolute repo root
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+
+   # Switch to your worktree using absolute path
+   cd "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}"
+
+   # Verify you're in the correct worktree
+   pwd  # Should show .worktrees/{run-id}-task-{task-id}
+   git branch --show-current  # Should be {base-branch}
    ```
+
+   **IMPORTANT**: Execute this setup block BEFORE reading the plan or implementing anything.
 
    2. Read task details from: {plan-path}
       Find: "Task {task-id}: {task-name}"
@@ -289,23 +317,61 @@ For phases where tasks must run in order:
 
    This prevents race conditions when git-spice is updating metadata.
 
-   8. Report completion with:
+   8. Detach HEAD and report completion:
+   ```bash
+   git switch --detach
+   ```
+
+   Then report:
       - Summary of changes
       - Files modified
       - Test results
       - Branch name created
       - Commit hash
-      - Any issues encountered
+      - Confirmation that HEAD is detached
 
    CRITICAL:
-   - ✅ Stay on current branch (will move to new branch after commit)
+   - ✅ cd into worktree first
    - ✅ Run ALL quality checks
    - ✅ Stage changes with git add
    - ✅ Use gs branch create with -m flag to commit
-   - ✅ Follow mandatory patterns
+   - ✅ MUST detach HEAD after creating branch
+   - ❌ DO NOT clean up worktree (orchestrator does this)
    ```
 
-2. After ALL tasks in phase complete:
+   **C. Remove task worktree after subagent completes:**
+
+   ```bash
+   # Get repo root
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+
+   # Verify branch was created
+   git branch -v | grep "{run-id}-task-{task-id}"
+
+   # Remove worktree
+   git worktree remove "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}"
+   ```
+
+2. After ALL tasks in phase complete, stack branches in {run-id}-main:
+
+   ```bash
+   # Get repo root and switch to main worktree
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+   cd "$REPO_ROOT/.worktrees/{run-id}-main"
+
+   # Check out each task branch in order and stack
+   # First task stays on base, subsequent tasks stack on previous
+   git checkout {run-id}-task-{first-task-id}-{short-name}
+
+   # For each subsequent task:
+   git checkout {run-id}-task-{next-task-id}-{short-name}
+   gs upstack onto {run-id}-task-{previous-task-id}-{short-name}
+
+   # Verify stack structure
+   gs log short
+   ```
+
+3. After branches are stacked:
 
    **MANDATORY: Use `requesting-code-review` skill to dispatch code review subagent:**
 
@@ -601,10 +667,20 @@ For phases where tasks are independent:
    # Should still see all task branches for this run
    ```
 
-   5. Create linear stack from parallel branches:
+   5. Switch to {run-id}-main worktree to create linear stack:
+   ```bash
+   # Switch to main worktree where we'll stack all branches
+   cd "$REPO_ROOT/.worktrees/{run-id}-main"
+   pwd  # Verify we're in the main worktree
+   ```
+
+   6. Create linear stack from parallel branches:
    ```bash
    # Stack parallel branches linearly (task order: 2.1 -> 2.2 -> 2.3 etc)
-   # First task stays on base ({run-id}-main), subsequent tasks stack on previous
+   # First task stays on base, subsequent tasks stack on previous
+   git checkout {run-id}-task-{task-id-1}-{short-name}
+
+   # For each subsequent task, stack on previous:
    git checkout {run-id}-task-{task-id-2}-{short-name}
    gs upstack onto {run-id}-task-{task-id-1}-{short-name}
 
@@ -613,7 +689,7 @@ For phases where tasks are independent:
    # gs upstack onto {run-id}-task-{task-id-2}-{short-name}
    ```
 
-   6. Verify git-spice stack structure:
+   7. Verify git-spice stack structure:
    ```bash
    gs log short
    ```
@@ -627,7 +703,7 @@ For phases where tasks are independent:
    main
    ```
 
-   7. Run integration tests (if commands detected):
+   8. Run integration tests (if commands detected):
    ```bash
    # Check out the top of the stack (last parallel task)
    git checkout {run-id}-task-{task-id-2}-{short-name}
@@ -639,7 +715,7 @@ For phases where tasks are independent:
 
    If no test commands found, verify manually or skip with warning.
 
-   8. Report:
+   9. Report:
    - Confirmation all worktrees cleaned up
    - List of branches created and verified
    - Linear stack structure (task number order)
