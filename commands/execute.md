@@ -145,40 +145,27 @@ Verify plan structure:
 - ✅ All tasks have acceptance criteria
 - ✅ Dependencies make sense
 
-### Step 1.5: Read Constitution and Detect Project Commands
+### Step 1.5: Detect Project Commands (Optional)
 
-**Before spawning subagents, read the constitution files once and detect project-specific quality check commands.**
+**Optionally detect project-specific quality check commands for subagents to use.**
 
-This avoids every subagent reading the same files, significantly reducing file I/O and context bloat.
+**This is optional - most projects define commands in CLAUDE.md that subagents can discover.**
 
-```bash
-# Get repo root
-REPO_ROOT=$(git rev-parse --show-toplevel)
+If you want to provide hints, check for common patterns:
+- **TypeScript/JavaScript**: `package.json` scripts
+- **Python**: `pytest`, `ruff`, `black`
+- **Go**: `go test`, `golangci-lint`
+- **Rust**: `cargo test`, `cargo clippy`
 
-# Read constitution files from the main worktree
-ARCH=$(cat "$REPO_ROOT/.worktrees/{run-id}-main/docs/constitutions/current/architecture.md")
-PATTERNS=$(cat "$REPO_ROOT/.worktrees/{run-id}-main/docs/constitutions/current/patterns.md")
-TECH_STACK=$(cat "$REPO_ROOT/.worktrees/{run-id}-main/docs/constitutions/current/tech-stack.md")
-```
+**If detected, mention in subagent prompts:**
+- `TEST_CMD` - Command to run tests
+- `LINT_CMD` - Command to run linting
+- `FORMAT_CMD` - Command to format code
+- `BUILD_CMD` - Command to build project
 
-**Detect project-specific quality check commands:**
+**If not detected, subagents will check CLAUDE.md or skip quality checks with warning.**
 
-Check for commands in CLAUDE.md, constitution/testing.md, or common project patterns:
-
-- **TypeScript/JavaScript**: Check `package.json` for `test`, `lint`, `format`, `build` scripts
-- **Python**: Look for `pytest`, `ruff`, `black`, `mypy`
-- **Go**: Use `go test`, `golangci-lint run`, `go fmt`
-- **Rust**: Use `cargo test`, `cargo clippy`, `cargo fmt`
-
-If CLAUDE.md has "## Development Commands" section with `test`, `lint`, `format`, `build` defined, use those.
-
-If not found, quality checks will be skipped with warning to user.
-
-**Store as variables for use in subagent prompts:**
-- `TEST_CMD` - Command to run tests (e.g., "npm test", "pytest", "go test")
-- `LINT_CMD` - Command to run linting (e.g., "npm run lint", "ruff check .")
-- `FORMAT_CMD` - Command to format code (e.g., "npm run format", "black .")
-- `BUILD_CMD` - Command to build project (e.g., "npm run build", "go build")
+**IMPORTANT: Do NOT read constitution files here. Let subagents read them as needed to reduce orchestrator token usage.**
 
 ### Step 2: Execute Phases
 
@@ -241,52 +228,31 @@ For phases where tasks must run in order:
 
    **IMPORTANT**: Execute this setup block BEFORE reading the plan or implementing anything.
 
-   2. Read task details from: {plan-path}
+   2. Read task details from: specs/{runId}-{slug}/plan.md
       Find: "Task {task-id}: {task-name}"
 
-      Note: Plan is in the worktree at specs/{runId}-{slug}/plan.md
+   3. Read project constitution: docs/constitutions/current/
+      - architecture.md - Layer boundaries and structure
+      - patterns.md - Mandatory patterns to follow
+      - tech-stack.md - Approved libraries and versions
 
-   3. Implement according to:
+   4. Implement according to:
       - Files specified in task
       - Acceptance criteria in task
-      - Project constitution (provided below)
+      - Constitution patterns (you just read them)
 
-   **PROJECT CONSTITUTION:**
+   5. Quality checks:
+      - Check CLAUDE.md for test/lint/format/build commands
+      - If found, run them
+      - If not found, skip with warning
 
-   The following constitution rules must be followed for all implementation:
-
-   <architecture>
-   {ARCH content from Step 1.5}
-   </architecture>
-
-   <patterns>
-   {PATTERNS content from Step 1.5}
-   </patterns>
-
-   <tech-stack>
-   {TECH_STACK content from Step 1.5}
-   </tech-stack>
-
-   4. Quality checks (run if commands detected):
-   ```bash
-   # Run format/lint/test if detected in Step 1.5
-   if [ -n "$FORMAT_CMD" ]; then $FORMAT_CMD; fi
-   if [ -n "$LINT_CMD" ]; then $LINT_CMD; fi
-   if [ -n "$TEST_CMD" ]; then $TEST_CMD; fi
-   ```
-
-   If no commands were detected, skip with warning:
-   ```
-   ⚠️  No quality check commands found - skipping format/lint/test
-   ```
-
-   5. Stage changes:
+   6. Stage changes:
    ```bash
    git add --all
    git status  # Verify changes staged
    ```
 
-   6. Create branch and commit with gs branch create:
+   7. Create branch and commit with gs branch create:
    ```bash
    gs branch create {run-id}-task-{task-id}-{short-name} -m "[Task {task-id}] {task-name}
 
@@ -306,7 +272,7 @@ For phases where tasks must run in order:
    - Commit all staged changes
    - Stack the branch on current branch automatically
 
-   7. Verify branch creation completed:
+   8. Verify branch creation completed:
    ```bash
    # Wait for git-spice to finish by verifying we're on the new branch
    CURRENT_BRANCH=$(git branch --show-current)
@@ -326,7 +292,7 @@ For phases where tasks must run in order:
 
    This prevents race conditions when git-spice is updating metadata.
 
-   8. Detach HEAD and report completion:
+   9. Detach HEAD and report completion:
    ```bash
    git switch --detach
    ```
@@ -519,43 +485,22 @@ For phases where tasks are independent:
    1. Read plan from: specs/{run-id}-{feature-slug}/plan.md
       Find: "Task {task-id}: {task-name}"
 
-      Note: The plan exists in your worktree because it was branched from {run-id}-main.
+   2. Read project constitution: docs/constitutions/current/
+      - architecture.md - Layer boundaries and structure
+      - patterns.md - Mandatory patterns to follow
+      - tech-stack.md - Approved libraries and versions
 
-   2. Implement according to:
+   3. Implement according to:
       - Files specified in task
       - Acceptance criteria in task
-      - Project constitution (provided below)
+      - Constitution patterns (you just read them)
 
-   **PROJECT CONSTITUTION:**
+   4. Quality checks:
+      - Check CLAUDE.md for test/lint/format/build commands
+      - If found, run them
+      - If not found, skip with warning
 
-   The following constitution rules must be followed for all implementation:
-
-   <architecture>
-   {ARCH content from Step 1.5}
-   </architecture>
-
-   <patterns>
-   {PATTERNS content from Step 1.5}
-   </patterns>
-
-   <tech-stack>
-   {TECH_STACK content from Step 1.5}
-   </tech-stack>
-
-   3. Quality checks (run if commands detected):
-   ```bash
-   # Run format/lint/test if detected in Step 1.5
-   if [ -n "$FORMAT_CMD" ]; then $FORMAT_CMD; fi
-   if [ -n "$LINT_CMD" ]; then $LINT_CMD; fi
-   if [ -n "$TEST_CMD" ]; then $TEST_CMD; fi
-   ```
-
-   If no commands were detected, skip with warning:
-   ```
-   ⚠️  No quality check commands found - skipping format/lint/test
-   ```
-
-   5. Stage changes (but DO NOT commit):
+   5. Stage changes:
    ```bash
    git add --all
    git status  # Verify changes staged
