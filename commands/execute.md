@@ -46,7 +46,8 @@ PLAN_PATH="{the-plan-path-user-provided}"
 # Extract RUN_ID from the directory name
 # Plan path format: .worktrees/{runid}-main/specs/{runid}-feature-name/plan.md
 # or just: specs/{runid}-feature-name/plan.md
-DIR_NAME=$(basename "$(dirname "$PLAN_PATH")")
+# Use sed to extract directory name without nested command substitution
+DIR_NAME=$(echo "$PLAN_PATH" | sed 's|^.*specs/||; s|/plan.md$||')
 RUN_ID=$(echo "$DIR_NAME" | cut -d'-' -f1)
 
 echo "Extracted RUN_ID: $RUN_ID"
