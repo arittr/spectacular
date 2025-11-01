@@ -274,11 +274,24 @@ Sequential tasks build on each other, so they can share a worktree. This saves ~
       - Dependency install already done (skip it)
       - Run tests/lint/build
 
-   5. Use `using-git-spice` skill to:
-      - Create branch: {run-id}-task-{task-id}-{short-name}
-      - Commit with message: "[Task {task-id}] {task-name}"
-      - Include acceptance criteria in commit body
-      - Stay on new branch (next task will build on it)
+   5. Create new stacked branch and commit your work:
+
+      CRITICAL: Stage changes FIRST, then create branch (which commits automatically).
+
+      Use `using-git-spice` skill which teaches this two-step workflow:
+
+      a) FIRST: Stage your changes
+         - Command: `git add .`
+
+      b) THEN: Create new stacked branch (commits staged changes automatically)
+         - Command: `gs branch create {run-id}-task-{task-id}-{short-name} -m "[Task {task-id}] {task-name}"`
+         - This creates branch, switches to it, and commits in one operation
+         - Include acceptance criteria in commit body
+
+      c) Stay on the new branch (next task builds on it)
+
+      If you commit BEFORE staging and creating branch, your work goes to the wrong branch.
+      Read the `using-git-spice` skill if uncertain about the workflow.
 
    6. Report completion (files changed, branch created, tests passing)
 
@@ -402,11 +415,26 @@ For phases where tasks are independent:
       - Dependency install may have been skipped (already done)
       - Run tests/lint/build
 
-   5. Use `using-git-spice` skill to:
-      - Create branch: {run-id}-task-{task-id}-{short-name}
-      - Commit with message: "[Task {task-id}] {task-name}"
-      - Include acceptance criteria in commit body
-      - Detach HEAD when done
+   5. Create new stacked branch and commit your work:
+
+      CRITICAL: Stage changes FIRST, then create branch (which commits automatically).
+
+      Use `using-git-spice` skill which teaches this two-step workflow:
+
+      a) FIRST: Stage your changes
+         - Command: `git add .`
+
+      b) THEN: Create new stacked branch (commits staged changes automatically)
+         - Command: `gs branch create {run-id}-task-{task-id}-{short-name} -m "[Task {task-id}] {task-name}"`
+         - This creates branch, switches to it, and commits in one operation
+         - Include acceptance criteria in commit body
+
+      c) Detach HEAD when done
+         - Command: `git switch --detach`
+         - Makes branch accessible in parent repo after worktree cleanup
+
+      If you commit BEFORE staging and creating branch, your work goes to the wrong branch.
+      Read the `using-git-spice` skill if uncertain about the workflow.
 
    6. Report completion (files changed, branch created, tests passing)
 
@@ -644,8 +672,15 @@ git checkout {task-branch}
 if [ -n "$TEST_CMD" ]; then $TEST_CMD; fi
 if [ -n "$FORMAT_CMD" ]; then $FORMAT_CMD; fi
 if [ -n "$LINT_CMD" ]; then $LINT_CMD; fi
+
+# If fixing on existing task branch (no new branch needed):
 git add --all
 git commit -m "[{task-id}] Fix: {description}"
+
+# If creating new fix as stacked branch:
+# gs branch create {run-id}-task-{task-id}-fix-{issue}
+# git add --all
+# git commit -m "[{task-id}] Fix: {description}"
 ```
 
 ### Option B: Restart Failed Agent
