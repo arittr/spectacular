@@ -27,7 +27,7 @@ echo "RUN_ID: $RUN_ID"
 # Path pattern: .../specs/{runId}-{feature-slug}/spec.md
 # Use sed to extract directory name without nested command substitution
 SPEC_PATH="{spec-path}"
-DIR_NAME=$(echo "$SPEC_PATH" | sed 's|.*/specs/||; s|/spec.md||')
+DIR_NAME=$(echo "$SPEC_PATH" | sed 's|^.*specs/||; s|/spec.md$||')
 FEATURE_SLUG=$(echo "$DIR_NAME" | sed "s/^${RUN_ID}-//")
 echo "FEATURE_SLUG: $FEATURE_SLUG"
 ```
