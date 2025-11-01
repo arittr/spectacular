@@ -305,17 +305,21 @@ Sequential tasks build on each other, so they can share a worktree. This saves ~
    - Do NOT clean up worktree
    ```
 
-4. **After ALL tasks complete, clean up phase worktree:**
+4. **After ALL tasks complete, stack branches FIRST (before cleanup):**
 
-   Use `using-git-worktrees` skill to remove `.worktrees/{run-id}-phase-{phase-id}`
-
-5. **Stack branches in main worktree:**
+   CRITICAL: Stack branches BEFORE removing worktree, or branches become inaccessible.
 
    Use `using-git-spice` skill to:
    - Navigate to `{run-id}-main` worktree temporarily
    - Track and stack all phase branches linearly (task order)
    - Verify stack with `gs log short`
    - Return to main repo
+
+5. **THEN clean up phase worktree (after stacking):**
+
+   Use `using-git-worktrees` skill to remove `.worktrees/{run-id}-phase-{phase-id}`
+
+   Stacking must complete first, otherwise branches created in the phase worktree may be lost.
 
 3. After branches are stacked:
 
@@ -452,14 +456,9 @@ For phases where tasks are independent:
 5. **Wait for all parallel agents to complete**
    (Agents work independently, orchestrator collects results)
 
-6. **Clean up parallel worktrees:**
+6. **Stack branches linearly FIRST (before cleanup):**
 
-   Use `using-git-worktrees` skill to:
-   - Verify all task branches exist
-   - Remove all task worktrees
-   - Verify branches still accessible after cleanup
-
-7. **Stack branches linearly:**
+   CRITICAL: Stack branches BEFORE removing worktrees, even though HEAD is detached.
 
    Use `using-git-spice` skill to:
    - Navigate to `{run-id}-main` worktree temporarily
@@ -468,6 +467,15 @@ For phases where tasks are independent:
    - Verify stack structure with `gs log short`
    - Run integration tests on top of stack (if commands available)
    - Return to main repo
+
+7. **THEN clean up parallel worktrees (after stacking):**
+
+   Use `using-git-worktrees` skill to:
+   - Verify all task branches exist and are stacked
+   - Remove all task worktrees
+   - Verify branches still accessible after cleanup
+
+   Stacking must complete first for safety and to run integration tests on the complete stack.
 
 8. **MANDATORY: Use `requesting-code-review` skill to dispatch code review subagent:**
 
