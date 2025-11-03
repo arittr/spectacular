@@ -32,7 +32,7 @@ FEATURE_SLUG=$(echo "$DIR_NAME" | sed "s/^${RUN_ID}-//")
 echo "FEATURE_SLUG: $FEATURE_SLUG"
 ```
 
-**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains.
+**CRITICAL**: Execute this entire block as a single multi-line Bash tool call. The comment on the first line is REQUIRED - without it, command substitution `$(...)` causes parse errors.
 
 **If RUN_ID not found:**
 Generate one now (for backwards compatibility with old specs):
@@ -44,7 +44,7 @@ RUN_ID=$(echo "{feature-name}-$TIMESTAMP" | shasum -a 256 | head -c 6)
 echo "Generated RUN_ID: $RUN_ID (spec missing runId)"
 ```
 
-**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains.
+**CRITICAL**: Execute this entire block as a single multi-line Bash tool call. The comment on the first line is REQUIRED - without it, command substitution `$(...)` causes parse errors.
 
 **Spec Directory Pattern:**
 Specs follow the pattern: `specs/{run-id}-{feature-slug}/spec.md`
@@ -70,7 +70,7 @@ else
 fi
 ```
 
-**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains.
+**CRITICAL**: Execute this entire block as a single multi-line Bash tool call. The comment on the first line is REQUIRED - without it, command substitution `$(...)` causes parse errors.
 
 **If worktree doesn't exist:**
 Error immediately with clear message:
