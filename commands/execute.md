@@ -381,11 +381,46 @@ For phases where tasks are independent:
 
    **You MUST create worktrees first. Do NOT spawn agents until all worktrees exist.**
 
-   Use `using-git-worktrees` skill to:
-   - Get base branch from `{run-id}-main` worktree
-   - Create worktree for each parallel task: `.worktrees/{run-id}-task-{task-id}`
-   - Branch from current branch in `{run-id}-main` worktree
-   - Verify all worktrees created (one per parallel task)
+   **CRITICAL: Verify you are in main repo root FIRST, not a worktree:**
+
+   ```bash
+   # Get main repo root (not worktree!)
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+
+   # Verify not currently in a worktree
+   if [[ "$REPO_ROOT" =~ \.worktrees ]]; then
+     echo "❌ Error: Currently in worktree, must run from main repo"
+     echo "Current: $REPO_ROOT"
+     exit 1
+   fi
+
+   # Navigate to main repo root
+   cd "$REPO_ROOT"
+   pwd  # Should show main repo path, not .worktrees/...
+   ```
+
+   **Then create worktrees from verified main repo location:**
+
+   ```bash
+   # Get base branch from main worktree
+   BASE_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
+
+   # Create isolated worktrees in DETACHED HEAD state
+   # Using --detach allows multiple worktrees without branch conflicts
+   # Subagents will create their own branches with gs branch create
+   for TASK_ID in {list-of-task-ids}; do
+     git worktree add ".worktrees/{runid}-task-${TASK_ID}" --detach "$BASE_BRANCH"
+     echo "✅ Created .worktrees/{runid}-task-${TASK_ID} (detached HEAD)"
+   done
+
+   # Verify all worktrees created
+   git worktree list | grep "{runid}-task-"
+   # Each should show "(detached HEAD)" status
+   ```
+
+   **Why --detach?** Git doesn't allow the same branch to be checked out in multiple worktrees. Detached HEAD state allows parallel worktrees, and subagents will create their actual task branches with `gs branch create`.
+
+   **If you create worktrees from wrong location (inside a worktree), you'll get nested worktrees and path errors.**
 
    **Announce:** "Created {count} isolated worktrees for parallel execution"
 
@@ -447,9 +482,12 @@ For phases where tasks are independent:
    REPO_ROOT=$(git rev-parse --show-toplevel)
    cd "$REPO_ROOT/.worktrees/{run-id}-task-{task-id}"
    pwd  # MUST show: .worktrees/{run-id}-task-{task-id}
+   git status  # Should show "HEAD detached at <commit>"
    ```
 
    If pwd shows anything else (like {run-id}-main), STOP and report error.
+
+   **Note**: Detached HEAD state is expected - you'll create your branch in step 5.
 
    INSTRUCTIONS:
 
@@ -509,13 +547,52 @@ For phases where tasks are independent:
 
    CRITICAL: Stack branches BEFORE removing worktrees, even though HEAD is detached.
 
-   Use `using-git-spice` skill to:
-   - Navigate to `{run-id}-main` worktree temporarily
-   - Check out first task branch
-   - Stack remaining branches linearly (task number order)
-   - Verify stack structure with `gs log short`
-   - Run integration tests on top of stack (if commands available)
-   - Return to main repo
+   **Create linear stack using this exact command sequence:**
+
+   ```bash
+   # Verify starting from main repo
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+   cd "$REPO_ROOT"
+
+   # Navigate to main worktree for git-spice operations
+   cd .worktrees/{runid}-main
+
+   # For N parallel tasks, stack them linearly: task-1 → task-2 → ... → task-N
+   # Pattern: checkout, track, then stack onto previous (except first)
+
+   # Task 1: Base of stack (no upstack onto needed)
+   git checkout {runid}-task-1-{name}
+   gs branch track
+
+   # Task 2: Stack onto task-1
+   git checkout {runid}-task-2-{name}
+   gs branch track
+   gs upstack onto {runid}-task-1-{name}
+
+   # Task 3: Stack onto task-2
+   git checkout {runid}-task-3-{name}
+   gs branch track
+   gs upstack onto {runid}-task-2-{name}
+
+   # Continue pattern for additional tasks...
+
+   # Verify linear stack structure
+   gs log short
+   # Should show: task-1 → task-2 → task-3 → ... (linear chain)
+
+   # Run integration tests if commands available
+   if [ -n "$TEST_CMD" ]; then
+     echo "Running integration tests on complete stack..."
+     $TEST_CMD
+   fi
+
+   # Return to main repo
+   cd "$REPO_ROOT"
+   ```
+
+   **If you don't follow this exact sequence (checkout, track, upstack onto), branches won't form linear dependency chain.**
+
+   **Reference**: See `using-git-spice` skill for command details if uncertain about git-spice operations.
 
 7. **THEN clean up parallel worktrees (after stacking):**
 
@@ -525,6 +602,30 @@ For phases where tasks are independent:
    - Verify branches still accessible after cleanup
 
    Stacking must complete first for safety and to run integration tests on the complete stack.
+
+8. **Clean up any temporary branches created during worktree setup:**
+
+   ```bash
+   # From main repo
+   cd "$REPO_ROOT"
+
+   # Delete any -tmp branches that might have been created during worktree setup
+   # These can happen if git worktree add was called with -b flag
+   for TASK_ID in {list-of-task-ids}; do
+     git branch -d {runid}-task-${TASK_ID}-tmp 2>/dev/null || true
+   done
+
+   # Verify only actual task branches remain
+   echo "=== Branches for RUN_ID {runid} ==="
+   git branch | grep "^  {runid}-task-"
+   # Should show only: task-1-{name}, task-2-{name}, etc. (no -tmp branches)
+
+   # Verify with git-spice
+   gs ls
+   # Stack should show clean linear chain without temporary branches
+   ```
+
+   **If temporary branches remain, they pollute the stack and confuse git-spice tracking.**
 
 8. **MANDATORY: Use `requesting-code-review` skill to dispatch code review subagent:**
 
