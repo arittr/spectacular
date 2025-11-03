@@ -145,132 +145,108 @@ echo ""
 
 ### Step 5: Dispatch Subagents in Parallel
 
-**IMPORTANT:** This step requires dispatching multiple subagents in parallel using the Task tool. Each subagent will:
+Now dispatch one subagent per scenario using the Task tool. Each subagent will verify the scenario's success criteria.
 
-1. Receive a test fixture clone path
-2. Receive a scenario file path
-3. Execute the scenario using the `testing-workflows-with-subagents` skill
-4. Report PASS or FAIL with evidence
+For each scenario file found in Step 3, dispatch a subagent with these instructions:
 
-**Subagent Dispatch Instructions:**
-
-For each scenario in `SCENARIO_FILES`, create a subagent task with these instructions:
+**Subagent Prompt Template:**
 
 ```
-ROLE: Test Scenario Executor
+You are testing spectacular command implementation against a test scenario.
 
-SCENARIO: [scenario file path]
-FIXTURE: tests/fixtures/simple-typescript (or simple-python based on scenario needs)
+SCENARIO FILE: {scenario_file_path}
+REPOSITORY ROOT: /Users/drewritter/projects/spectacular
 
-INSTRUCTIONS:
+## Your Task
 
-1. Navigate to spectacular repository root
+1. Read the scenario file at the path above
+2. Understand the Context, Expected Behavior, and Success Criteria sections
+3. Verify whether the implementation matches the scenario expectations
+4. Report PASS or FAIL in the required format
 
-2. Read scenario file at [scenario file path]
-   - Understand Context, Expected Behavior, Success Criteria
+## Verification Approach
 
-3. The scenario describes what SHOULD happen when the tested command runs correctly.
-   Your job is to verify the command produces this behavior.
+The scenario describes what SHOULD happen when the command works correctly. Your job is to verify:
 
-4. Execute scenario verification:
-   - If scenario involves running a spectacular command, check if command exists
-   - If scenario involves git operations, verify git structure
-   - If scenario involves file creation, verify files exist
-   - Use Success Criteria as verification checklist
+- If scenario mentions command structure → Check command file exists and has described sections
+- If scenario mentions git operations → Check that commands/skills document the git workflow
+- If scenario mentions file creation → Check that instructions describe creating those files
+- If scenario has Success Criteria → Use as verification checklist
 
-5. Report result:
+## Reporting Format
 
-   PASS Format:
-   ✅ PASS: [scenario name]
-   All success criteria met:
-   - [criterion 1]: verified
-   - [criterion 2]: verified
-   Evidence: [relevant command outputs, file contents, git structure]
+**PASS Format:**
+```
+✅ PASS: {scenario_name}
 
-   FAIL Format:
-   ❌ FAIL: [scenario name]
-   Unmet criteria:
-   - [criterion X]: FAILED - [reason]
-   Evidence: [error messages, wrong outputs, missing files]
+All success criteria met:
+- [criterion 1]: ✓ verified
+- [criterion 2]: ✓ verified
 
-CRITICAL: You are NOT running the tested command yourself. You are verifying
-that the implementation (if it exists) matches the scenario's expectations.
-For meta-testing the test command itself, verify the command structure exists
-and follows the expected patterns described in the scenario.
+Evidence:
+[Show relevant file excerpts, command structure, or git workflow documentation]
 ```
 
-**Orchestrator Note:**
-
-Since Claude Code may not support true parallel subagent dispatch via Task tool in all contexts, this step describes the INTENDED behavior. The implementation should:
-
-1. Create isolated test fixture clones for each scenario
-2. Dispatch one subagent per scenario (in parallel if possible)
-3. Collect results from each subagent
-4. Aggregate into summary report
-
-**For initial implementation (GREEN phase), acknowledge this limitation:**
-
-```bash
-echo "⚠️  Note: Parallel subagent dispatch requires Task tool support"
-echo "Current implementation will document the architecture for future enhancement"
-echo ""
-echo "Expected workflow:"
-echo "  1. Clone fixture to .worktrees/test-{timestamp}-{scenario-id}/"
-echo "  2. Dispatch subagent with scenario + fixture paths"
-echo "  3. Subagent executes scenario verification"
-echo "  4. Subagent reports PASS/FAIL"
-echo "  5. Orchestrator aggregates results"
-echo ""
+**FAIL Format:**
 ```
+❌ FAIL: {scenario_name}
+
+Unmet criteria:
+- [criterion X]: ✗ FAILED - [reason]
+- [criterion Y]: ✗ FAILED - [reason]
+
+Evidence:
+[Show what's missing or incorrect]
+```
+
+## Critical Notes
+
+- You are verifying DOCUMENTATION/IMPLEMENTATION, not running the command
+- For execute command scenarios: Check that commands/execute.md documents the workflow
+- For meta-testing (test command): Verify command structure matches scenario expectations
+- Be precise: Only mark criteria as met if you have clear evidence
+
+Now begin verification.
+```
+
+Dispatch all subagents in parallel by calling Task tool multiple times in a single message.
 
 ### Step 6: Aggregate Results
 
-**For initial implementation:** Document expected result aggregation:
+After all subagents complete, collect their results and display a summary.
 
-```bash
-echo "========================================="
-echo "Test Results Summary"
-echo "========================================="
-echo ""
+For each subagent result:
 
-# This is the INTENDED implementation:
-# PASSED=0
-# FAILED=0
-# TOTAL=${#SCENARIO_FILES[@]}
-#
-# for result in "${SUBAGENT_RESULTS[@]}"; do
-#   if [[ "$result" == "PASS"* ]]; then
-#     PASSED=$((PASSED + 1))
-#     echo "✅ $result"
-#   else
-#     FAILED=$((FAILED + 1))
-#     echo "❌ $result"
-#   fi
-# done
-#
-# echo ""
-# echo "Results: $PASSED/$TOTAL passed"
-#
-# if [ "$FAILED" -gt 0 ]; then
-#   echo ""
-#   echo "❌ $FAILED scenario(s) failed"
-#   exit 1
-# else
-#   echo ""
-#   echo "✅ All scenarios passed!"
-#   exit 0
-# fi
+1. Parse the result to determine if it's PASS or FAIL
+   - Look for `✅ PASS:` or `❌ FAIL:` in the subagent output
+   - Extract scenario name and status
 
-# For now, document the architecture:
-echo "Architecture defined for result aggregation:"
-echo "  - Each subagent reports PASS or FAIL"
-echo "  - Orchestrator collects all results"
-echo "  - Summary shows X/Y passed"
-echo "  - Exit code 0 if all pass, non-zero if any fail"
-echo ""
-echo "Implementation status: Architecture documented, awaiting Task tool integration"
-echo ""
+2. Display each result as received
+
+3. Calculate totals:
+   - Count PASS results
+   - Count FAIL results
+   - Total scenarios
+
+4. Display summary:
+
 ```
+=========================================
+Test Results Summary
+=========================================
+
+✅ PASS: scenario-1
+❌ FAIL: scenario-2
+✅ PASS: scenario-3
+
+Results: 2/3 passed
+
+❌ 1 scenario(s) failed
+```
+
+5. Communicate final status to user:
+   - If all scenarios passed: Success message
+   - If any scenarios failed: List which ones failed and suggest reviewing the evidence
 
 ### Step 7: Cleanup
 
@@ -316,48 +292,48 @@ This command implements the testing workflow described in `skills/testing-specta
 
 ## Current Implementation Status
 
-**Phase:** GREEN (Initial Implementation)
+**Phase:** GREEN (Fully Functional)
 
 **What Works:**
 - Command parsing and validation
 - Test infrastructure checks
 - Scenario discovery and listing
-- Cleanup architecture
+- Parallel subagent dispatch using Task tool
+- Result aggregation and reporting
+- PASS/FAIL status with evidence
+- Cleanup of test artifacts
 
-**What's Documented:**
-- Parallel subagent dispatch architecture
-- Result aggregation format
-- PASS/FAIL reporting structure
+**Usage:**
+
+Run all scenarios for a specific command:
+```bash
+/spectacular:test execute    # Test execute command scenarios
+/spectacular:test init       # Test init command scenarios
+/spectacular:test spec       # Test spec command scenarios
+/spectacular:test plan       # Test plan command scenarios
+```
+
+Run all scenarios across all commands:
+```bash
+/spectacular:test all
+```
+
+**Expected Output:**
+
+The command will:
+1. Discover all matching scenarios
+2. Dispatch parallel subagents to verify each scenario
+3. Aggregate and display results
+4. Report overall PASS/FAIL status
 
 **Next Steps (Future Enhancement):**
-- Integrate with Task tool for true parallel dispatch
-- Implement fixture cloning per scenario
-- Implement result aggregation from subagents
 - Add timing metrics (execution time per scenario)
-
-**Usage Until Full Implementation:**
-
-Use this command to:
-1. Validate test infrastructure exists
-2. List available scenarios
-3. Understand testing architecture
-4. Manually run scenarios using documented structure
-
-Manual scenario execution:
-```bash
-# List scenarios
-/spectacular:test execute
-
-# Read scenario file
-cat tests/scenarios/execute/parallel-stacking-2-tasks.md
-
-# Manually verify against success criteria
-# Use testing-workflows-with-subagents skill for structured verification
-```
+- Support filtering scenarios by tags
+- Generate HTML test reports
 
 ## Example Output
 
-**Successful validation:**
+**All scenarios passing:**
 ```
 Running test scenarios for: execute
 
@@ -378,27 +354,72 @@ Scenarios to run:
 
 =========================================
 
-⚠️  Note: Parallel subagent dispatch requires Task tool support
-Current implementation will document the architecture for future enhancement
+Dispatching 6 subagents to verify scenarios...
 
-Expected workflow:
-  1. Clone fixture to .worktrees/test-{timestamp}-{scenario-id}/
-  2. Dispatch subagent with scenario + fixture paths
-  3. Subagent executes scenario verification
-  4. Subagent reports PASS/FAIL
-  5. Orchestrator aggregates results
+[Subagent outputs appear here as they complete]
 
 =========================================
 Test Results Summary
 =========================================
 
-Architecture defined for result aggregation:
-  - Each subagent reports PASS or FAIL
-  - Orchestrator collects all results
-  - Summary shows X/Y passed
-  - Exit code 0 if all pass, non-zero if any fail
+✅ PASS: parallel-stacking-2-tasks
+✅ PASS: parallel-stacking-3-tasks
+✅ PASS: parallel-stacking-4-tasks
+✅ PASS: sequential-stacking
+✅ PASS: worktree-creation
+✅ PASS: cleanup-tmp-branches
 
-Implementation status: Architecture documented, awaiting Task tool integration
+Results: 6/6 passed
+
+✅ All scenarios passed!
+
+Cleaning up test artifacts...
+✅ Cleanup complete
+```
+
+**Some scenarios failing:**
+```
+Running test scenarios for: execute
+
+✅ Test fixtures found
+✅ Test scenarios found
+
+Collecting scenarios from execute command...
+Found 6 scenarios for execute
+
+Scenarios to run:
+=================
+  [execute] parallel-stacking-2-tasks
+  [execute] parallel-stacking-3-tasks
+  [execute] parallel-stacking-4-tasks
+  [execute] sequential-stacking
+  [execute] worktree-creation
+  [execute] cleanup-tmp-branches
+
+=========================================
+
+Dispatching 6 subagents to verify scenarios...
+
+[Subagent outputs appear here as they complete]
+
+=========================================
+Test Results Summary
+=========================================
+
+✅ PASS: parallel-stacking-2-tasks
+❌ FAIL: parallel-stacking-3-tasks
+❌ FAIL: parallel-stacking-4-tasks
+✅ PASS: sequential-stacking
+✅ PASS: worktree-creation
+✅ PASS: cleanup-tmp-branches
+
+Results: 4/6 passed
+
+❌ 2 scenario(s) failed:
+- parallel-stacking-3-tasks
+- parallel-stacking-4-tasks
+
+Review the subagent evidence above to understand what's missing.
 
 Cleaning up test artifacts...
 ✅ Cleanup complete
