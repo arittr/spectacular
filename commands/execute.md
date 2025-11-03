@@ -210,59 +210,24 @@ For each phase in the plan, execute based on strategy:
 
 For phases where tasks must run in order:
 
-**OPTIMIZATION: Use single worktree for entire phase (not per-task)**
+**KEY INSIGHT: Sequential tasks work directly in `{runid}-main` worktree**
 
-Sequential tasks build on each other, so they can share a worktree. This saves ~2-3 minutes per task from worktree creation/destruction and dependency installs.
+Sequential tasks build on each other and use git-spice's natural stacking behavior. Each task creates a new branch with `gs branch create`, which automatically stacks on the current HEAD. No manual stacking operations needed.
 
-1. **Create phase worktree once:**
+1. **Verify setup in main worktree:**
 
-   Use `using-git-worktrees` skill to:
-   - Create worktree at `.worktrees/{run-id}-phase-{phase-id}`
-   - Branch from current branch in `{run-id}-main` worktree
-   - Ensure worktree is created at same level as `{run-id}-main` (not nested)
+   Sequential tasks work in the existing `{run-id}-main` worktree (created during spec generation).
 
-2. **Run project setup once:**
+   - Verify dependencies already installed from spec phase
+   - If `node_modules` missing, run setup commands from CLAUDE.md
+   - No new worktree creation needed
 
-   **REQUIRED**: Phase worktree needs dependencies before tasks execute.
-
-   a) **Check CLAUDE.md for setup commands**:
-      - Look for `## Development Commands` → `### Setup` section
-      - Extract `install` command (e.g., `bun install`)
-      - Extract `postinstall` command if defined (e.g., `npx prisma generate`)
-
-   b) **If setup commands found, run installation**:
-      ```bash
-      # Navigate to phase worktree
-      cd .worktrees/${RUN_ID}-phase-${PHASE_ID}
-
-      # Check if dependencies already installed (handles resume)
-      if [ ! -d node_modules ]; then
-        echo "Installing dependencies in phase worktree..."
-        {install-command}  # From CLAUDE.md
-
-        # Run postinstall if defined
-        if [ -n "{postinstall-command}" ]; then
-          echo "Running postinstall (codegen)..."
-          {postinstall-command}  # From CLAUDE.md
-        fi
-      else
-        echo "✅ Dependencies already installed in phase worktree"
-      fi
-      ```
-
-   c) **If setup commands NOT in CLAUDE.md, error**:
-      - Stop execution
-      - Tell user to add setup commands to CLAUDE.md
-      - See "Using Spectacular in Your Project" section for format
-
-   **Why install per phase**: Phase worktree is shared across all sequential tasks, so install ONCE saves time vs per-task installs.
-
-3. **For each task in the phase, spawn subagent:**
+2. **For each task in the phase, spawn subagent in sequence:**
 
    ```
-   ROLE: Implement Task {task-id} in shared phase worktree
+   ROLE: Implement Task {task-id} in main worktree (sequential phase)
 
-   WORKTREE: .worktrees/{run-id}-phase-{phase-id}
+   WORKTREE: .worktrees/{run-id}-main
    CURRENT BRANCH: {current-branch-in-worktree}
 
    TASK: {task-name}
@@ -277,7 +242,10 @@ Sequential tasks build on each other, so they can share a worktree. This saves ~
 
    INSTRUCTIONS:
 
-   1. Navigate to phase worktree (you're working here with other phase tasks)
+   1. Navigate to main worktree:
+      ```bash
+      cd .worktrees/{run-id}-main
+      ```
 
    2. Read constitution: docs/constitutions/current/
       - architecture.md - Project structure and boundaries
@@ -290,7 +258,7 @@ Sequential tasks build on each other, so they can share a worktree. This saves ~
       - Follow architecture/patterns from constitution
 
    4. Run quality checks (check CLAUDE.md for commands)
-      - Dependencies already installed by orchestrator (node_modules present)
+      - Dependencies already installed from spec phase
       - Run tests/lint/build using CLAUDE.md quality check commands
 
    5. Create new stacked branch and commit your work:
@@ -302,15 +270,15 @@ Sequential tasks build on each other, so they can share a worktree. This saves ~
       a) FIRST: Stage your changes
          - Command: `git add .`
 
-      b) THEN: Create new stacked branch (commits staged changes automatically)
-         - Command: `gs branch create {run-id}-task-{task-id}-{short-name} -m "[Task {task-id}] {task-name}"`
+      b) THEN: Create new stacked branch (commits staged changes automatically and stacks on current HEAD)
+         - Command: `gs branch create {run-id}-task-{phase-id}-{task-id}-{short-name} -m "[Task {phase-id}-{task-id}] {task-name}"`
          - This creates branch, switches to it, and commits in one operation
+         - The branch automatically stacks on whatever branch you're currently on
          - Include acceptance criteria in commit body
 
-      c) Stay on the new branch (next task builds on it)
+      c) Stay on the new branch (next task builds on it automatically)
 
-      If you commit BEFORE staging and creating branch, your work goes to the wrong branch.
-      Read the `using-git-spice` skill if uncertain about the workflow.
+      **Natural stacking**: Because you stay on your new branch, the next task's `gs branch create` will automatically stack on your branch. No manual stacking needed.
 
    6. Report completion (files changed, branch created, tests passing)
 
@@ -318,28 +286,25 @@ Sequential tasks build on each other, so they can share a worktree. This saves ~
    - Full plan: specs/{runId}-{slug}/plan.md
 
    CRITICAL:
-   - Work in phase worktree (shared with other phase tasks)
-   - Stay on your branch when done (next task builds on it)
-   - Do NOT clean up worktree
+   - Work in {run-id}-main worktree (shared for all sequential tasks)
+   - Stay on your branch when done (next task automatically stacks on it)
+   - Do NOT create new worktrees or cleanup
    ```
 
-4. **After ALL tasks complete, stack branches FIRST (before cleanup):**
+3. **Verify natural stack formation:**
 
-   CRITICAL: Stack branches BEFORE removing worktree, or branches become inaccessible.
+   After all sequential tasks complete, verify the linear stack was created naturally:
 
-   Use `using-git-spice` skill to:
-   - Navigate to `{run-id}-main` worktree temporarily
-   - Track and stack all phase branches linearly (task order)
-   - Verify stack with `gs log short`
-   - Return to main repo
+   ```bash
+   cd .worktrees/{run-id}-main
+   gs log short
+   # Should show: task-1 → task-2 → task-3 (linear chain, automatically stacked)
+   cd "$REPO_ROOT"
+   ```
 
-5. **THEN clean up phase worktree (after stacking):**
+   **No manual stacking needed**: Each task's `gs branch create` automatically stacked on the previous task's branch.
 
-   Use `using-git-worktrees` skill to remove `.worktrees/{run-id}-phase-{phase-id}`
-
-   Stacking must complete first, otherwise branches created in the phase worktree may be lost.
-
-3. After branches are stacked:
+4. **After verification:**
 
    **MANDATORY: Use `requesting-code-review` skill to dispatch code review subagent:**
 
@@ -602,30 +567,6 @@ For phases where tasks are independent:
    - Verify branches still accessible after cleanup
 
    Stacking must complete first for safety and to run integration tests on the complete stack.
-
-8. **Clean up any temporary branches created during worktree setup:**
-
-   ```bash
-   # From main repo
-   cd "$REPO_ROOT"
-
-   # Delete any -tmp branches that might have been created during worktree setup
-   # These can happen if git worktree add was called with -b flag
-   for TASK_ID in {list-of-task-ids}; do
-     git branch -d {runid}-task-${TASK_ID}-tmp 2>/dev/null || true
-   done
-
-   # Verify only actual task branches remain
-   echo "=== Branches for RUN_ID {runid} ==="
-   git branch | grep "^  {runid}-task-"
-   # Should show only: task-1-{name}, task-2-{name}, etc. (no -tmp branches)
-
-   # Verify with git-spice
-   gs ls
-   # Stack should show clean linear chain without temporary branches
-   ```
-
-   **If temporary branches remain, they pollute the stack and confuse git-spice tracking.**
 
 8. **MANDATORY: Use `requesting-code-review` skill to dispatch code review subagent:**
 

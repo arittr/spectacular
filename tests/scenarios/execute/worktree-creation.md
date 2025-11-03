@@ -46,15 +46,15 @@ git show-ref --verify refs/heads/{runid}-main
 # Navigate to repo root (defensive, even if already there)
 cd "$REPO_ROOT"
 
-# Create worktrees for 3 parallel tasks
-git worktree add .worktrees/{runid}-task-1 {runid}-main
-git worktree add .worktrees/{runid}-task-2 {runid}-main
-git worktree add .worktrees/{runid}-task-3 {runid}-main
+# Create worktrees for 3 parallel tasks with detached HEAD
+git worktree add .worktrees/{runid}-task-1 --detach {runid}-main
+git worktree add .worktrees/{runid}-task-2 --detach {runid}-main
+git worktree add .worktrees/{runid}-task-3 --detach {runid}-main
 ```
 
 **Critical constraints:**
-- NO `-b` flag (don't create temporary branches)
-- All worktrees branch from `{runid}-main` branch
+- Use `--detach` flag (creates detached HEAD, no branch conflicts)
+- Each worktree starts at same commit as `{runid}-main` branch
 - All worktrees under `.worktrees/` directory in main repo
 
 ### Post-Creation Verification
