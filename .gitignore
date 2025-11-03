@@ -1,3 +1,6 @@
 .worktrees/
 NOTES.md
+
+# Test fixtures are templates - git repos initialized by init-fixtures.sh
+# Fixture files are tracked, but their .git directories are created dynamically
 tests/fixtures/*/.git/
