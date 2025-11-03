@@ -21,12 +21,12 @@ Testing `/spectacular:execute` with the simplest parallel execution case: exactl
 1. Orchestrator creates 2 isolated worktrees from main repo:
    ```bash
    cd /path/to/repo  # Main repo, NOT .worktrees/{runid}-main
-   git worktree add .worktrees/{runid}-task-1 {runid}-main
-   git worktree add .worktrees/{runid}-task-2 {runid}-main
+   git worktree add .worktrees/{runid}-task-1 --detach {runid}-main
+   git worktree add .worktrees/{runid}-task-2 --detach {runid}-main
    ```
 
-2. Each worktree branches from current commit of `{runid}-main` branch
-3. No temporary branches created (no `-b` flag usage)
+2. Each worktree has detached HEAD at current commit of `{runid}-main` branch
+3. No temporary branches created (`--detach` flag ensures clean worktree state)
 
 ### Parallel Execution
 
