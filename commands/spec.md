@@ -32,7 +32,7 @@ RUN_ID=$(echo "{feature-description}-$TIMESTAMP" | shasum -a 256 | head -c 6)
 echo "RUN_ID: $RUN_ID"
 ```
 
-**IMPORTANT**: Execute this entire block as a single multi-line Bash tool call. Do NOT convert to a single line with `&&` chains - this causes eval parse errors with command substitution.
+**CRITICAL**: Execute this entire block as a single multi-line Bash tool call. The comment on the first line is REQUIRED - without it, command substitution `$(...)` causes parse errors.
 
 **Store for use in:**
 - Spec directory name: `specs/{run-id}-{feature-slug}/`
@@ -68,6 +68,65 @@ echo "RUN_ID: $RUN_ID"
 - Main repository working directory remains unchanged
 
 **Announce:** "Worktree created at .worktrees/{runId}-main/ - all work will happen in isolation"
+
+### Step 0.5: Install Dependencies in Worktree
+
+**REQUIRED**: Each worktree needs dependencies installed before work begins.
+
+1. **Check CLAUDE.md for setup commands**:
+
+   Look for this pattern in the project's CLAUDE.md:
+   ```markdown
+   ## Development Commands
+
+   ### Setup
+
+   - **install**: `bun install`
+   - **postinstall**: `npx prisma generate`
+   ```
+
+2. **If setup commands found, run installation**:
+
+   ```bash
+   # Navigate to worktree
+   cd .worktrees/${RUN_ID}-main
+
+   # Check if dependencies already installed (handles resume)
+   if [ ! -d node_modules ]; then
+     echo "Installing dependencies..."
+     {install-command}  # From CLAUDE.md (e.g., bun install)
+
+     # Run postinstall if defined
+     if [ -n "{postinstall-command}" ]; then
+       echo "Running postinstall (codegen)..."
+       {postinstall-command}  # From CLAUDE.md (e.g., npx prisma generate)
+     fi
+   else
+     echo "✅ Dependencies already installed"
+   fi
+   ```
+
+3. **If setup commands NOT found in CLAUDE.md**:
+
+   **Error and instruct user**:
+   ```markdown
+   ❌ Setup Commands Required
+
+   Worktrees need dependencies installed to run quality checks and codegen.
+
+   Please add to your project's CLAUDE.md:
+
+   ## Development Commands
+
+   ### Setup
+
+   - **install**: `bun install` (or npm install, pnpm install, etc.)
+   - **postinstall**: `npx prisma generate` (optional - for codegen)
+
+   Then re-run: /spectacular:spec {feature-description}
+   ```
+
+**Announce:** "Dependencies installed in worktree - ready for spec generation"
 
 ### Step 1: Brainstorm Requirements
 
