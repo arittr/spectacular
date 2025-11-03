@@ -1,2 +1,3 @@
 .worktrees/
 NOTES.md
+tests/fixtures/*/.git/
