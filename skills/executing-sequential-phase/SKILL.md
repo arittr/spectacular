@@ -1,0 +1,259 @@
+---
+name: executing-sequential-phase
+description: Use when orchestrating sequential phases in plan execution - executes tasks one-by-one in main worktree using git-spice natural stacking (NO manual upstack commands, NO worktree creation, tasks build on each other)
+---
+
+# Executing Sequential Phase
+
+## Overview
+
+**Sequential phases use natural git-spice stacking in the main worktree.**
+
+Each task creates a branch with `gs branch create`, which automatically stacks on the current HEAD. No manual stacking operations needed.
+
+**Critical distinction:** Sequential tasks BUILD ON each other. They need integration, not isolation.
+
+## When to Use
+
+Use this skill when `execute` command encounters a phase marked "Sequential" in plan.md:
+- ✅ Tasks must run in order (dependencies)
+- ✅ Execute in existing `{runid}-main` worktree
+- ✅ Trust natural stacking (no manual `gs upstack onto`)
+- ✅ Stay on task branches (don't switch to base between tasks)
+
+**Sequential phases never use worktrees.** They share one workspace where tasks build cumulatively.
+
+## The Natural Stacking Principle
+
+```
+SEQUENTIAL PHASE = MAIN WORKTREE + NATURAL STACKING
+```
+
+**What natural stacking means:**
+1. Start on base branch (or previous task's branch)
+2. Create new branch with `gs branch create` → automatically stacks on current
+3. Stay on that branch when done
+4. Next task creates from there → automatically stacks on previous
+
+**No manual commands needed.** The workflow IS the stacking.
+
+## The Process
+
+**Announce:** "I'm using executing-sequential-phase to execute {N} tasks sequentially in Phase {phase-id}."
+
+### Step 1: Verify Setup in Main Worktree
+
+**Work in the existing `{runid}-main` worktree:**
+
+```bash
+cd .worktrees/{runid}-main
+
+# Check dependencies installed
+if [ ! -d node_modules ]; then
+  # Run setup from CLAUDE.md
+  {install-command}
+  {postinstall-command}
+fi
+```
+
+**Why main worktree:** Sequential tasks were created during spec generation. All sequential phases share this worktree.
+
+**Red flag:** "Create phase-specific worktree" - NO. Sequential = shared worktree.
+
+### Step 2: Execute Tasks Sequentially
+
+**For each task in order, spawn ONE subagent:**
+
+```
+ROLE: Implement Task {task-id} in main worktree (sequential phase)
+
+WORKTREE: .worktrees/{run-id}-main
+CURRENT BRANCH: {current-branch}
+
+TASK: {task-name}
+FILES: {files-list}
+ACCEPTANCE CRITERIA: {criteria}
+
+INSTRUCTIONS:
+
+1. Navigate to main worktree:
+   cd .worktrees/{run-id}-main
+
+2. Read constitution (if exists): docs/constitutions/current/
+
+3. Implement task
+
+4. Run quality checks with exit code validation:
+   npm test; if [ $? -ne 0 ]; then exit 1; fi
+   npm run lint; if [ $? -ne 0 ]; then exit 1; fi
+   npm run build; if [ $? -ne 0 ]; then exit 1; fi
+
+5. Create stacked branch (CRITICAL - Stage THEN create):
+   a) git add .
+   b) gs branch create {run-id}-task-{phase}-{task}-{name} -m "[Task {phase}-{task}] {task-name}"
+   c) Stay on this branch (next task builds on it)
+
+6. Report completion
+
+CRITICAL:
+- Work in {run-id}-main worktree (shared)
+- Stay on your branch when done
+- Do NOT create worktrees
+- Do NOT use `gs upstack onto`
+```
+
+**Sequential dispatch:** Wait for each task to complete before starting next.
+
+**Red flags:**
+- "Dispatch all tasks in parallel" - NO. Sequential = one at a time.
+- "Create task-specific worktrees" - NO. Sequential = shared worktree.
+
+### Step 3: Verify Natural Stack Formation
+
+**After all tasks complete:**
+
+```bash
+cd .worktrees/{runid}-main
+gs log short
+# Should show: task-1 → task-2 → task-3 (linear chain)
+cd "$REPO_ROOT"
+```
+
+**Each `gs branch create` automatically stacked on the previous task's branch.**
+
+**Red flag:** "Run `gs upstack onto` to ensure stacking" - NO. Already stacked naturally.
+
+### Step 4: Code Review
+
+**Use `requesting-code-review` skill:**
+
+```
+Skill tool: requesting-code-review
+```
+
+Phase complete ONLY when code review passes.
+
+## The Manual Stacking Anti-Pattern
+
+**Most common mistake:** Adding redundant `gs upstack onto` commands.
+
+**Wrong approach:**
+```bash
+# Task 1
+gs branch create task-1
+gs upstack onto base-branch  # ← REDUNDANT
+
+# Task 2
+gs branch create task-2
+gs upstack onto task-1       # ← REDUNDANT
+```
+
+**Why wrong:**
+- `gs branch create` ALREADY stacked on current branch
+- `gs upstack onto` is for fixing relationships, not creating them
+- Adds complexity without value
+- Suggests you don't trust the tool
+
+**Correct approach:**
+```bash
+# Task 1 (from base branch)
+gs branch create task-1
+# ← Done. task-1 stacks on base automatically
+
+# Task 2 (currently on task-1)
+gs branch create task-2
+# ← Done. task-2 stacks on task-1 automatically
+```
+
+**The workflow IS explicit control:**
+1. Current branch = what we're building on
+2. `gs branch create` = create and stack
+3. Stay on new branch = ready for next task
+
+**Trust the tool.** Git-spice is designed for this workflow.
+
+## Rationalization Table
+
+| Excuse | Reality |
+|--------|---------|
+| "Need `gs upstack onto` to be explicit" | `gs branch create` IS explicit - it stacks on current HEAD |
+| "Manual stacking confirms relationships" | Workflow confirms relationships - current branch = parent |
+| "What if I forgot to switch branches?" | You SHOULD stay on task branch - that's the pattern |
+| "Automatic stacking might make mistakes" | Automatic = deterministic. Manual = adding error opportunities |
+| "Files don't overlap, could parallelize" | Plan says sequential for semantic dependencies. Trust it. |
+| "Switch to base between tasks for clean state" | Clean = committed. Stay on task branch for natural stacking. |
+| "Clean up build artifacts between tasks" | Artifacts don't interfere. Git manages source, build tools manage artifacts. |
+| "Create phase-specific worktree" | Sequential phases share main worktree. No isolation needed. |
+
+## Red Flags - STOP and Follow Process
+
+If you're thinking ANY of these, you're about to violate the skill:
+
+- "Better add `gs upstack onto` to be safe"
+- "Let me explicitly stack these relationships"
+- "Manual commands give me more control"
+- "Switch back to base branch between tasks"
+- "Create worktrees for each task"
+- "Dispatch all tasks in parallel (files don't overlap)"
+- "Clean workspace before next task"
+
+**All of these mean: STOP. Trust natural stacking.**
+
+## Common Mistakes
+
+### Mistake 1: Manual Stacking Urge
+
+**Wrong mental model:** "Explicit stacking commands ensure correctness."
+
+**Correct model:** "The workflow (create from current branch, stay on new branch) IS the stacking mechanism."
+
+**Impact:** Redundant commands that suggest misunderstanding git-spice fundamentals.
+
+### Mistake 2: Switching to Base Between Tasks
+
+**Wrong mental model:** "Return to base branch for clean state between tasks."
+
+**Correct model:** "Clean state = committed changes. Stay on task branch so next task builds on it."
+
+**Impact:** Breaks natural stacking chain. Task N+1 wouldn't build on Task N.
+
+### Mistake 3: Creating Worktrees for Sequential
+
+**Wrong mental model:** "Worktrees worked for parallel, use them everywhere."
+
+**Correct model:** "Worktrees enable parallel isolation. Sequential tasks need integration, not isolation."
+
+**Impact:** Unnecessary complexity. Sequential tasks need to see each other's changes.
+
+## Quick Reference
+
+**Mandatory pattern (no variations):**
+
+1. Work in `{runid}-main` worktree (existing, shared)
+2. For each task sequentially:
+   - Spawn subagent
+   - Wait for completion
+   - Verify branch created
+3. Verify natural stack (gs log short)
+4. Code review
+
+**Never:**
+- ❌ Create worktrees for sequential tasks
+- ❌ Use `gs upstack onto` (redundant)
+- ❌ Switch to base branch between tasks
+- ❌ Dispatch tasks in parallel
+- ❌ Clean build artifacts between tasks
+
+**Always:**
+- ✅ Use existing main worktree
+- ✅ Trust `gs branch create` for stacking
+- ✅ Stay on task branches
+- ✅ Execute tasks one at a time
+
+## The Bottom Line
+
+**Sequential phases use natural stacking in the main worktree.**
+
+If you're creating worktrees or running manual stacking commands, you're applying parallel patterns to sequential phases - which is wrong.
+
+The simplicity IS the correctness. One worktree, natural stacking, sequential execution.
