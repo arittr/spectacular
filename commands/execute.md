@@ -37,16 +37,8 @@ For example:
 - RUN_ID: `3a00a7`
 
 ```bash
-# Get absolute repo root
-REPO_ROOT=$(git rev-parse --show-toplevel)
-
-# User provided plan path (substitute the actual path here)
+# Extract RUN_ID from plan path (replace {the-plan-path-user-provided} with actual path)
 PLAN_PATH="{the-plan-path-user-provided}"
-
-# Extract RUN_ID from the directory name
-# Plan path format: .worktrees/{runid}-main/specs/{runid}-feature-name/plan.md
-# or just: specs/{runid}-feature-name/plan.md
-# Use sed to extract directory name without nested command substitution
 DIR_NAME=$(echo "$PLAN_PATH" | sed 's|^.*specs/||; s|/plan.md$||')
 RUN_ID=$(echo "$DIR_NAME" | cut -d'-' -f1)
 
@@ -59,10 +51,7 @@ if [ -z "$RUN_ID" ]; then
 fi
 ```
 
-**IMPORTANT**:
-- Replace `{the-plan-path-user-provided}` with the actual path from the user's command
-- Execute this entire block as a single multi-line Bash tool call
-- Do NOT convert to a single line with `&&` chains
+**CRITICAL**: Execute this entire block as a single multi-line Bash tool call. The comment on the first line is REQUIRED - without it, command substitution `$(...)` causes parse errors.
 
 **Store RUN_ID for use in:**
 - Branch naming: `{run-id}-task-X-Y-name`
@@ -234,10 +223,39 @@ Sequential tasks build on each other, so they can share a worktree. This saves ~
 
 2. **Run project setup once:**
 
-   In the phase worktree, run initial setup:
-   - Check if package.json changed: `git diff --quiet HEAD package.json package-lock.json`
-   - If changed: Run install (e.g., `bun install`, `npm install`)
-   - If unchanged: Skip install (save 30s-1m per task)
+   **REQUIRED**: Phase worktree needs dependencies before tasks execute.
+
+   a) **Check CLAUDE.md for setup commands**:
+      - Look for `## Development Commands` → `### Setup` section
+      - Extract `install` command (e.g., `bun install`)
+      - Extract `postinstall` command if defined (e.g., `npx prisma generate`)
+
+   b) **If setup commands found, run installation**:
+      ```bash
+      # Navigate to phase worktree
+      cd .worktrees/${RUN_ID}-phase-${PHASE_ID}
+
+      # Check if dependencies already installed (handles resume)
+      if [ ! -d node_modules ]; then
+        echo "Installing dependencies in phase worktree..."
+        {install-command}  # From CLAUDE.md
+
+        # Run postinstall if defined
+        if [ -n "{postinstall-command}" ]; then
+          echo "Running postinstall (codegen)..."
+          {postinstall-command}  # From CLAUDE.md
+        fi
+      else
+        echo "✅ Dependencies already installed in phase worktree"
+      fi
+      ```
+
+   c) **If setup commands NOT in CLAUDE.md, error**:
+      - Stop execution
+      - Tell user to add setup commands to CLAUDE.md
+      - See "Using Spectacular in Your Project" section for format
+
+   **Why install per phase**: Phase worktree is shared across all sequential tasks, so install ONCE saves time vs per-task installs.
 
 3. **For each task in the phase, spawn subagent:**
 
@@ -272,8 +290,8 @@ Sequential tasks build on each other, so they can share a worktree. This saves ~
       - Follow architecture/patterns from constitution
 
    4. Run quality checks (check CLAUDE.md for commands)
-      - Dependency install already done (skip it)
-      - Run tests/lint/build
+      - Dependencies already installed by orchestrator (node_modules present)
+      - Run tests/lint/build using CLAUDE.md quality check commands
 
    5. Create new stacked branch and commit your work:
 
@@ -368,11 +386,42 @@ For phases where tasks are independent:
    - Create worktree for each parallel task: `.worktrees/{run-id}-task-{task-id}`
    - Branch from current branch in `{run-id}-main` worktree
    - Verify all worktrees created (one per parallel task)
-   - Optionally run dependency installs if package files changed
 
    **Announce:** "Created {count} isolated worktrees for parallel execution"
 
-3. **AFTER all worktrees exist, spawn parallel agents:**
+3. **Install dependencies in EACH parallel worktree**
+
+   **REQUIRED**: Each isolated worktree needs its own dependencies.
+
+   a) **Check CLAUDE.md for setup commands** (same as sequential):
+      - Look for `## Development Commands` → `### Setup` section
+      - Extract `install` and `postinstall` commands
+
+   b) **For each parallel task worktree, run installation**:
+      ```bash
+      # Navigate to task worktree
+      cd .worktrees/${RUN_ID}-task-${TASK_ID}
+
+      # Check if dependencies already installed (handles resume)
+      if [ ! -d node_modules ]; then
+        echo "Installing dependencies in task worktree..."
+        {install-command}  # From CLAUDE.md
+
+        # Run postinstall if defined
+        if [ -n "{postinstall-command}" ]; then
+          echo "Running postinstall (codegen)..."
+          {postinstall-command}  # From CLAUDE.md
+        fi
+      else
+        echo "✅ Dependencies already installed in task worktree"
+      fi
+      ```
+
+   c) **If setup commands NOT in CLAUDE.md, error** (same as sequential)
+
+   **Why install per task**: Parallel worktrees are isolated - they can't share node_modules.
+
+4. **AFTER all worktrees exist AND dependencies installed, spawn parallel agents:**
 
    **CRITICAL: Single message with multiple Task tools**
 
@@ -417,8 +466,8 @@ For phases where tasks are independent:
       - Follow architecture/patterns from constitution
 
    4. Run quality checks (check CLAUDE.md for commands)
-      - Dependency install may have been skipped (already done)
-      - Run tests/lint/build
+      - Dependencies already installed by orchestrator (node_modules present)
+      - Run tests/lint/build using CLAUDE.md quality check commands
 
    5. Create new stacked branch and commit your work:
 

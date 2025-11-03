@@ -49,6 +49,36 @@ spectacular/
 
 ## Using Spectacular in Your Project
 
+### Defining Setup Commands
+
+**REQUIRED**: Spectacular creates isolated git worktrees for each feature. Each worktree needs dependencies installed and codegen run. Define these commands in your project's CLAUDE.md:
+
+```markdown
+## Development Commands
+
+### Setup
+
+- **install**: `bun install` (or `npm install`, `pnpm install`, `yarn`, `pip install -r requirements.txt`, etc.)
+- **postinstall**: `npx prisma generate` (optional - any codegen needed after install)
+```
+
+**When setup runs:**
+- After creating main worktree (`/spectacular:spec`)
+- Before executing tasks in sequential phases
+- Before executing each task in parallel phases
+
+**Setup logic:**
+- Checks if `node_modules` (or equivalent) exists in worktree
+- If missing: Runs `install` command, then `postinstall` if defined
+- If exists: Skips installation (handles resume scenarios)
+
+**Why required:**
+- Worktrees are separate directories with no shared `node_modules`
+- Quality checks (test, lint, build) need dependencies
+- Codegen (Prisma, GraphQL, etc.) must run for types
+
+**If not defined:** Setup is skipped with error to user. Projects MUST define setup commands.
+
 ### Defining Quality Check Commands
 
 Spectacular's `/spectacular:execute` command runs project-specific quality checks after each task. Define these commands in your project's CLAUDE.md:
