@@ -1,6 +1,25 @@
 # Test Scenario: Cleanup Temporary Branches
 
-## Context
+## ⚠️ SCENARIO OBSOLETE
+
+**Status:** This scenario tests a defensive cleanup feature that was removed (2025-11-03).
+
+**Decision:** Trust the implementation. If `git worktree add --detach` is used correctly, no `-tmp` branches are ever created. Defensive cleanup adds complexity for a bug that shouldn't exist.
+
+**What this tested:**
+- Cleanup of temporary branches created by incorrect use of `-b` flag
+- Defensive programming against implementation drift
+
+**Why removed:**
+- execute.md is too long; defensive checks add bloat
+- Correct implementation (`--detach` flag) prevents the issue entirely
+- If subagents hallucinate wrong git commands, the failure should surface naturally
+
+**If this becomes a problem again:** Add the cleanup back, but only after seeing real evidence of `-tmp` branch pollution in production usage.
+
+---
+
+## Original Context (for reference)
 
 Isolated test of temporary branch cleanup after parallel task execution completes.
 
