@@ -176,7 +176,75 @@ Verify plan structure:
 - ✅ All tasks have acceptance criteria
 - ✅ Dependencies make sense
 
-### Step 1.5: Detect Project Commands (Optional)
+### Step 1.5: Validate Setup Commands (REQUIRED)
+
+**CRITICAL: Validate CLAUDE.md setup commands BEFORE creating worktrees.**
+
+Worktrees require dependency installation before tasks can execute. Projects MUST define setup commands in CLAUDE.md.
+
+```bash
+# Get repo root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Check if CLAUDE.md exists
+if [ ! -f "$REPO_ROOT/CLAUDE.md" ]; then
+  echo "❌ Error: CLAUDE.md not found in repository root"
+  echo ""
+  echo "Spectacular requires CLAUDE.md to define setup commands."
+  echo "See: https://docs.claude.com/claude-code"
+  exit 1
+fi
+
+# Parse CLAUDE.md for setup section
+INSTALL_CMD=$(grep -A 10 "^### Setup" "$REPO_ROOT/CLAUDE.md" | grep "^- \*\*install\*\*:" | sed 's/.*: `\(.*\)`.*/\1/')
+
+if [ -z "$INSTALL_CMD" ]; then
+  echo "❌ Error: Setup commands not defined in CLAUDE.md"
+  echo ""
+  echo "Worktrees require dependency installation before tasks can execute."
+  echo ""
+  echo "Add this section to CLAUDE.md:"
+  echo ""
+  echo "## Development Commands"
+  echo ""
+  echo "### Setup"
+  echo "- **install**: \`npm install\`  (or your package manager)"
+  echo "- **postinstall**: \`npx prisma generate\`  (optional - any codegen)"
+  echo ""
+  echo "Example for different package managers:"
+  echo "- Node.js: npm install, pnpm install, yarn, or bun install"
+  echo "- Python: pip install -r requirements.txt"
+  echo "- Rust: cargo build"
+  echo "- Go: go mod download"
+  echo ""
+  echo "See: https://docs.claude.com/claude-code"
+  echo ""
+  echo "Execution stopped. Add setup commands to CLAUDE.md and retry."
+  exit 1
+fi
+
+# Extract postinstall command (optional)
+POSTINSTALL_CMD=$(grep -A 10 "^### Setup" "$REPO_ROOT/CLAUDE.md" | grep "^- \*\*postinstall\*\*:" | sed 's/.*: `\(.*\)`.*/\1/')
+
+# Report detected commands
+echo "✅ Setup commands found in CLAUDE.md"
+echo "   install: $INSTALL_CMD"
+if [ -n "$POSTINSTALL_CMD" ]; then
+  echo "   postinstall: $POSTINSTALL_CMD"
+fi
+```
+
+**If validation fails:**
+- Execution stops immediately
+- User gets clear error message with example
+- No worktrees created
+- No partial state left behind
+
+**If validation succeeds:**
+- Store `INSTALL_CMD` and `POSTINSTALL_CMD` for use in dependency installation steps
+- Proceed to phase execution
+
+### Step 1.6: Detect Project Commands (Optional)
 
 **Optionally detect project-specific quality check commands for subagents to use.**
 
@@ -206,6 +274,74 @@ For each phase in the plan, execute based on strategy:
 
 **IMPORTANT:** After each phase completes, MUST run code review using `requesting-code-review` skill before proceeding to next phase.
 
+#### Cross-Phase Stacking (How Phases Chain Together)
+
+**CRITICAL: Phases automatically build on each other's completed work**
+
+Understanding how phases chain together is essential for correct execution:
+
+**Example: Sequential → Parallel → Sequential**
+
+1. **Phase 1 (Sequential)** - Database setup
+   - Works in `{runid}-main` worktree
+   - Creates branch: `{runid}-task-1-1-database-schema`
+   - Leaves main worktree **on this branch** ← Key state for next phase
+
+2. **Phase 2 (Parallel)** - Three feature implementations
+   - **Base detection:**
+     ```bash
+     BASE_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
+     # Returns: {runid}-task-1-1-database-schema ← Inherits from Phase 1
+     ```
+   - Creates 3 worktrees **FROM Phase 1's completed branch**
+   - All parallel tasks build on Phase 1's database schema
+   - After stacking, leaves main worktree **on last parallel task** ← Key state for next phase
+
+3. **Phase 3 (Sequential)** - Integration tests
+   - Works in `{runid}-main` worktree (reused from Phase 1)
+   - Current branch: `{runid}-task-2-3-last-parallel-task` (from Phase 2)
+   - Creates branch: `{runid}-task-3-1-integration-tests`
+   - Automatically stacks on Phase 2's last task via natural stacking
+
+**Result:** Linear chain across all phases: Phase 1 → Phase 2 tasks → Phase 3
+
+**Verification between phases:**
+
+```bash
+# Before creating parallel worktrees (Phase 2)
+BASE_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
+echo "Phase 2 starting from: $BASE_BRANCH"
+# Should show Phase 1's completed branch
+
+# Before sequential task (Phase 3)
+CURRENT_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
+echo "Phase 3 starting from: $CURRENT_BRANCH"
+# Should show Phase 2's last stacked branch
+```
+
+**Key Principles:**
+
+1. **Main worktree tracks progress** - Current branch = latest completed work
+2. **Parallel phases inherit** - Use `git -C .worktrees/{runid}-main branch --show-current` as base
+3. **Parallel stacking preserves continuity** - Last stacked branch becomes next phase's base
+4. **Sequential phases extend naturally** - `gs branch create` stacks on current HEAD
+5. **No manual intervention needed** - Cross-phase chaining is automatic
+
+**Common Mistake to Avoid:**
+
+❌ **Wrong:** Creating parallel worktrees from `{runid}-main` branch (ignores Phase 1)
+```bash
+# DON'T DO THIS:
+git worktree add .worktrees/{runid}-task-2-1 --detach {runid}-main
+```
+
+✅ **Correct:** Creating parallel worktrees from current branch in main worktree
+```bash
+# DO THIS:
+BASE_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
+git worktree add .worktrees/{runid}-task-2-1 --detach "$BASE_BRANCH"
+```
+
 #### Sequential Phase Strategy
 
 For phases where tasks must run in order:
@@ -213,6 +349,19 @@ For phases where tasks must run in order:
 **KEY INSIGHT: Sequential tasks work directly in `{runid}-main` worktree**
 
 Sequential tasks build on each other and use git-spice's natural stacking behavior. Each task creates a new branch with `gs branch create`, which automatically stacks on the current HEAD. No manual stacking operations needed.
+
+**CRITICAL - DO NOT:**
+- ❌ Create phase-specific worktrees (e.g., `.worktrees/{runid}-phase-1`)
+- ❌ Create task-specific worktrees for sequential tasks (e.g., `.worktrees/{runid}-task-1-1`)
+- ❌ Use `gs upstack onto` for sequential tasks (natural stacking handles this)
+- ❌ Create temporary branches or detach HEAD
+- ❌ Run manual stacking operations after task completion
+
+**DO:**
+- ✅ Work in existing `{runid}-main` worktree for ALL sequential tasks
+- ✅ Use `gs branch create` which automatically stacks on current HEAD
+- ✅ Let each task build on previous task's branch naturally
+- ✅ Stay on newly created branch after each task (next task stacks on it)
 
 1. **Verify setup in main worktree:**
 
@@ -260,6 +409,37 @@ Sequential tasks build on each other and use git-spice's natural stacking behavi
    4. Run quality checks (check CLAUDE.md for commands)
       - Dependencies already installed from spec phase
       - Run tests/lint/build using CLAUDE.md quality check commands
+
+      **CRITICAL: Check exit codes and stop on failure**
+
+      ```bash
+      # Read quality check commands from CLAUDE.md
+      # Look for "### Quality Checks" section
+
+      # Example check sequence (adapt based on CLAUDE.md):
+      npm test
+      if [ $? -ne 0 ]; then
+        echo "❌ Tests failed"
+        echo "Fix test failures before creating branch"
+        exit 1
+      fi
+
+      npm run lint
+      if [ $? -ne 0 ]; then
+        echo "❌ Lint failed"
+        echo "Run 'npm run lint --fix' to auto-fix, or fix manually"
+        exit 1
+      fi
+
+      npm run build
+      if [ $? -ne 0 ]; then
+        echo "❌ Build failed"
+        echo "Fix TypeScript/compilation errors before creating branch"
+        exit 1
+      fi
+      ```
+
+      **Do NOT create branch if quality checks fail**
 
    5. Create new stacked branch and commit your work:
 
@@ -383,11 +563,45 @@ For phases where tasks are independent:
    # Each should show "(detached HEAD)" status
    ```
 
+   **Verify worktree creation succeeded:**
+
+   ```bash
+   # Count created worktrees
+   CREATED_COUNT=$(git worktree list | grep -c "{runid}-task-")
+
+   if [ $CREATED_COUNT -ne {expected-task-count} ]; then
+     echo "❌ Error: Expected {expected-task-count} worktrees, found $CREATED_COUNT"
+     git worktree list
+     exit 1
+   fi
+
+   echo "✅ Created $CREATED_COUNT worktrees for parallel execution"
+
+   # Verify each worktree has detached HEAD
+   for TASK_ID in {task-ids}; do
+     WORKTREE_PATH=".worktrees/{runid}-task-${TASK_ID}"
+
+     if [ ! -d "$WORKTREE_PATH" ]; then
+       echo "❌ Error: Worktree not found: $WORKTREE_PATH"
+       exit 1
+     fi
+
+     # Check HEAD is detached
+     if ! git -C "$WORKTREE_PATH" status | grep -q "HEAD detached"; then
+       echo "❌ Error: Worktree not in detached HEAD state: $WORKTREE_PATH"
+       git -C "$WORKTREE_PATH" status
+       exit 1
+     fi
+   done
+
+   echo "✅ All worktrees verified: detached HEAD, correct paths"
+   ```
+
    **Why --detach?** Git doesn't allow the same branch to be checked out in multiple worktrees. Detached HEAD state allows parallel worktrees, and subagents will create their actual task branches with `gs branch create`.
 
    **If you create worktrees from wrong location (inside a worktree), you'll get nested worktrees and path errors.**
 
-   **Announce:** "Created {count} isolated worktrees for parallel execution"
+   **Announce:** "Created and verified {count} isolated worktrees for parallel execution"
 
 3. **Install dependencies in EACH parallel worktree**
 
@@ -472,6 +686,37 @@ For phases where tasks are independent:
       - Dependencies already installed by orchestrator (node_modules present)
       - Run tests/lint/build using CLAUDE.md quality check commands
 
+      **CRITICAL: Check exit codes and stop on failure**
+
+      ```bash
+      # Read quality check commands from CLAUDE.md
+      # Look for "### Quality Checks" section
+
+      # Example check sequence (adapt based on CLAUDE.md):
+      npm test
+      if [ $? -ne 0 ]; then
+        echo "❌ Tests failed"
+        echo "Fix test failures before creating branch"
+        exit 1
+      fi
+
+      npm run lint
+      if [ $? -ne 0 ]; then
+        echo "❌ Lint failed"
+        echo "Run 'npm run lint --fix' to auto-fix, or fix manually"
+        exit 1
+      fi
+
+      npm run build
+      if [ $? -ne 0 ]; then
+        echo "❌ Build failed"
+        echo "Fix TypeScript/compilation errors before creating branch"
+        exit 1
+      fi
+      ```
+
+      **Do NOT create branch if quality checks fail**
+
    5. Create new stacked branch and commit your work:
 
       CRITICAL: Stage changes FIRST, then create branch (which commits automatically).
@@ -508,11 +753,50 @@ For phases where tasks are independent:
 5. **Wait for all parallel agents to complete**
    (Agents work independently, orchestrator collects results)
 
-6. **Stack branches linearly FIRST (before cleanup):**
+6. **Verify all tasks completed successfully BEFORE stacking:**
+
+   **CRITICAL: Do NOT proceed to stacking if any task failed.**
+
+   ```bash
+   # Check all task branches exist (confirms subagents created them)
+   FAILED_TASKS=()
+
+   for TASK_ID in {task-id-1} {task-id-2} {task-id-3}; do
+     BRANCH_NAME="{runid}-task-{phase-id}-${TASK_ID}-{short-name}"
+
+     if ! git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
+       FAILED_TASKS+=("Task ${TASK_ID}")
+     fi
+   done
+
+   # If any tasks failed, report and exit
+   if [ ${#FAILED_TASKS[@]} -gt 0 ]; then
+     echo "❌ Phase {phase-id} execution failed"
+     echo ""
+     echo "Failed tasks: ${FAILED_TASKS[*]}"
+     echo ""
+     echo "Successful tasks created branches. Failed tasks did not."
+     echo ""
+     echo "To resume:"
+     echo "1. Fix failures in task worktrees: .worktrees/{runid}-task-{id}"
+     echo "2. Create branches manually for fixed tasks"
+     echo "3. Re-run /spectacular:execute to complete phase"
+     exit 1
+   fi
+
+   echo "✅ All {task-count} tasks completed successfully"
+   ```
+
+   **Why this matters:**
+   - Failed tasks don't create branches (quality checks blocked commit)
+   - Stacking would fail or create incomplete chain
+   - Early detection provides clear error and recovery path
+
+7. **Stack branches linearly FIRST (before cleanup):**
 
    CRITICAL: Stack branches BEFORE removing worktrees, even though HEAD is detached.
 
-   **Create linear stack using this exact command sequence:**
+   **Create linear stack using loop-based algorithm:**
 
    ```bash
    # Verify starting from main repo
@@ -522,26 +806,52 @@ For phases where tasks are independent:
    # Navigate to main worktree for git-spice operations
    cd .worktrees/{runid}-main
 
-   # For N parallel tasks, stack them linearly: task-1 → task-2 → ... → task-N
-   # Pattern: checkout, track, then stack onto previous (except first)
+   # Get base branch from main worktree (what parallel tasks branched from)
+   BASE_BRANCH=$(git branch --show-current)
 
-   # Task 1: Base of stack (no upstack onto needed)
-   git checkout {runid}-task-1-{name}
-   gs branch track
+   # Array of task branch names (in order)
+   TASK_BRANCHES=(
+     "{runid}-task-{phase-id}-1-{short-name-1}"
+     "{runid}-task-{phase-id}-2-{short-name-2}"
+     "{runid}-task-{phase-id}-3-{short-name-3}"
+     # ... add all task branches in order
+   )
 
-   # Task 2: Stack onto task-1
-   git checkout {runid}-task-2-{name}
-   gs branch track
-   gs upstack onto {runid}-task-1-{name}
+   # Count tasks
+   TASK_COUNT=${#TASK_BRANCHES[@]}
 
-   # Task 3: Stack onto task-2
-   git checkout {runid}-task-3-{name}
-   gs branch track
-   gs upstack onto {runid}-task-2-{name}
+   # Handle edge case: N=1 (single task in parallel phase)
+   if [ $TASK_COUNT -eq 1 ]; then
+     echo "Single task in parallel phase - tracking only"
+     git checkout "${TASK_BRANCHES[0]}"
+     gs branch track
+     # No upstack needed for single task
+   else
+     # Handle N≥2: Stack tasks linearly
+     echo "Stacking $TASK_COUNT tasks linearly..."
 
-   # Continue pattern for additional tasks...
+     for i in "${!TASK_BRANCHES[@]}"; do
+       BRANCH="${TASK_BRANCHES[$i]}"
+
+       if [ $i -eq 0 ]; then
+         # First task: Track only (stacks on BASE_BRANCH automatically)
+         echo "Task 1: $BRANCH (base of stack)"
+         git checkout "$BRANCH"
+         gs branch track
+       else
+         # Subsequent tasks: Track and upstack onto previous
+         PREV_BRANCH="${TASK_BRANCHES[$((i-1))]}"
+         echo "Task $((i+1)): $BRANCH (stacking onto $PREV_BRANCH)"
+         git checkout "$BRANCH"
+         gs branch track
+         gs upstack onto "$PREV_BRANCH"
+       fi
+     done
+   fi
 
    # Verify linear stack structure
+   echo ""
+   echo "Verifying linear stack..."
    gs log short
    # Should show: task-1 → task-2 → task-3 → ... (linear chain)
 
@@ -555,7 +865,27 @@ For phases where tasks are independent:
    cd "$REPO_ROOT"
    ```
 
-   **If you don't follow this exact sequence (checkout, track, upstack onto), branches won't form linear dependency chain.**
+   **Algorithm handles all cases:**
+   - **N=1**: Single task gets tracked, no upstack (0 upstack operations)
+   - **N=2**: First task tracked, second upstacks onto first (1 upstack operation)
+   - **N=3**: Linear chain with 2 upstack operations
+   - **N≥4**: Generalizes to N-1 upstack operations
+
+   **Why this works:**
+   - First task always stacks on current HEAD in main worktree (natural stacking)
+   - Each subsequent task explicitly upstacks onto previous task (manual stacking)
+   - Result: Linear chain regardless of N
+
+   **Performance Characteristics:**
+   - **Time Complexity**: O(N) - Single loop processes each task exactly once
+   - **Operations per task**: 2-3 git-spice commands (checkout, track, upstack)
+   - **N=10 Expected Time**: ~30 seconds for stacking operations
+   - **Scalability**: Linear scaling (2 tasks → 10 tasks: +275% time, not +900%)
+   - **Resource Requirements**:
+     - **Disk**: ~500MB per worktree (~5GB total for N=10)
+     - **Memory**: ~200MB per parallel subagent (~2GB peak for N=10)
+     - **File handles**: N+1 worktrees (main + N task worktrees)
+   - **Performance validation**: No degradation from N=3 to N=10 scenarios
 
    **Reference**: See `using-git-spice` skill for command details if uncertain about git-spice operations.
 
