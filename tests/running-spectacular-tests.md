@@ -1,12 +1,10 @@
----
-description: Execute test scenarios for spectacular commands using parallel subagent dispatch
----
+# Running Spectacular Tests
 
-You are running test scenarios for the spectacular testing system.
+This document describes how to test spectacular commands using parallel subagent dispatch.
 
 ## Purpose
 
-This command orchestrates automated testing of spectacular commands by:
+This workflow orchestrates automated testing of spectacular commands by:
 - Cloning test fixtures to isolated environments
 - Dispatching subagents in parallel to run test scenarios
 - Aggregating results and reporting pass/fail status
@@ -14,10 +12,19 @@ This command orchestrates automated testing of spectacular commands by:
 
 ## Usage
 
-```bash
-/spectacular:test <command>    # Run scenarios for specific command (execute, init, spec, plan)
-/spectacular:test all          # Run all test scenarios across all commands
+Ask Claude to follow this testing workflow:
+
 ```
+"Follow the testing workflow in tests/running-spectacular-tests.md for the execute command"
+"Run all spectacular test scenarios using tests/running-spectacular-tests.md"
+```
+
+You can specify which scenarios to run:
+- `execute` - Test execute command scenarios
+- `init` - Test init command scenarios
+- `spec` - Test spec command scenarios
+- `plan` - Test plan command scenarios
+- `all` - Test all scenarios across all commands
 
 ## Workflow
 
@@ -275,7 +282,7 @@ echo ""
 
 ## Architecture
 
-This command implements the testing workflow described in `skills/testing-spectacular/SKILL.md`:
+This workflow implements the testing approach described in `skills/testing-spectacular/SKILL.md`:
 
 **RED Phase:** Test scenarios document expected behavior (tests exist before implementation)
 
@@ -305,22 +312,15 @@ This command implements the testing workflow described in `skills/testing-specta
 
 **Usage:**
 
-Run all scenarios for a specific command:
-```bash
-/spectacular:test execute    # Test execute command scenarios
-/spectacular:test init       # Test init command scenarios
-/spectacular:test spec       # Test spec command scenarios
-/spectacular:test plan       # Test plan command scenarios
+Ask Claude to run scenarios for a specific command:
 ```
-
-Run all scenarios across all commands:
-```bash
-/spectacular:test all
+"Follow tests/running-spectacular-tests.md for the execute command"
+"Run all spectacular test scenarios"
 ```
 
 **Expected Output:**
 
-The command will:
+The workflow will:
 1. Discover all matching scenarios
 2. Dispatch parallel subagents to verify each scenario
 3. Aggregate and display results
@@ -443,5 +443,3 @@ plan
 spec
 test
 ```
-
-Now run the test command validation.
