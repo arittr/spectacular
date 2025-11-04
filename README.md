@@ -8,8 +8,7 @@
 
 Enable AI agents to autonomously implement complex features in hours instead of days - with correctness guarantees through spec anchoring and automatic quality gates.
 
-> [!NOTE]
-> `/spectacular:execute` requires [git-spice](https://abhinav.github.io/git-spice/) for PR stacking. Support for Graphite coming soon!
+> [!NOTE] > `/spectacular:execute` requires [git-spice](https://abhinav.github.io/git-spice/) for PR stacking. Support for Graphite coming soon!
 
 ## Table of Contents
 
@@ -42,12 +41,12 @@ Without an anchor point, long-running tasks drift from requirements and architec
 ### 2. Everything Runs Sequentially
 
 ```
-Task 1: Update API endpoints       [████████] 45 min
-Task 2: Update database schema     [████████] 30 min  ← Could run in parallel!
-Task 3: Update UI components       [████████] 60 min  ← Could run in parallel!
-Task 4: Integration tests          [████████] 20 min
+Task 1: Update API endpoints       12 min
+Task 2: Update database schema      8 min  ← Could run in parallel!
+Task 3: Update UI components       15 min  ← Could run in parallel!
+Task 4: Integration tests           5 min
 
-Total: 155 minutes of serial execution
+Total: 40 minutes of serial execution
 ```
 
 Even when tasks are independent (no file conflicts), they run one-at-a-time. The time to implement features scales linearly with complexity.
@@ -67,6 +66,7 @@ Large features become giant diffs that are impossible to review effectively.
 ### 4. Architectural Drift
 
 Project patterns exist in documentation, code comments, and developer memory - but there's no single source of truth. AI tools either:
+
 - Hallucinate patterns that sound plausible but don't match your codebase
 - Copy whatever pattern they find first (even if it's outdated)
 - Inconsistently apply patterns across different files
@@ -82,24 +82,24 @@ Every feature gets a comprehensive specification that serves as the unchanging a
 ```
 ┌─────────────────────────────────────────────────────┐
 │  Feature Specification (spec.md)                    │
-│  ┌─────────────────────────────────────────────┐   │
-│  │ Requirements                                 │   │
-│  │ Architecture decisions                       │   │
-│  │ Acceptance criteria                          │   │
-│  │ References to constitution rules            │   │
-│  └─────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────┐    │
+│  │ Requirements                                │    │
+│  │ Architecture decisions                      │    │
+│  │ Acceptance criteria                         │    │
+│  │ References to constitution rules            │    │
+│  └─────────────────────────────────────────────┘    │
 │                      ▼                              │
 │            ┌──────────────────┐                     │
 │            │ Implementation   │                     │
 │            │ Plan (plan.md)   │                     │
 │            └──────────────────┘                     │
 │                      ▼                              │
-│        ┌──────┬──────┬──────┬──────┐              │
-│        │Task 1│Task 2│Task 3│Task 4│              │
-│        └──────┴──────┴──────┴──────┘              │
+│        ┌──────┬──────┬──────┬──────┐                │
+│        │Task 1│Task 2│Task 3│Task 4│                │
+│        └──────┴──────┴──────┴──────┘                │
 │                                                     │
-│  Every task references the SAME spec.              │
-│  No context drift. No pattern hallucination.       │
+│  Every task references the SAME spec.               │
+│  No context drift. No pattern hallucination.        │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -117,26 +117,26 @@ The planner analyzes your feature spec and automatically identifies which work c
 ```
 SEQUENTIAL (before):
 ┌─────────────────────────────────────────────────────┐
-│ Task 1: API endpoints        [████████] 45 min     │
-│ Task 2: Database schema      [████████] 30 min     │
-│ Task 3: UI components        [████████] 60 min     │
-│ Task 4: Integration tests    [████████] 20 min     │
+│ Task 1: API endpoints        12 min                 │
+│ Task 2: Database schema       8 min                 │
+│ Task 3: UI components        15 min                 │
+│ Task 4: Integration tests     5 min                 │
 └─────────────────────────────────────────────────────┘
-Total: 155 minutes
+Total: 40 minutes
 
 PARALLEL (automatic):
 ┌─────────────────────────────────────────────────────┐
 │ Phase 1 (sequential):                               │
-│   Task 1: API endpoints      [████████] 45 min     │
+│   Task 1: API endpoints      12 min                 │
 │                                                     │
-│ Phase 2 (parallel):          ┌──────────────────┐  │
-│   Task 2: DB schema          │ [████████] 30min │  │
-│   Task 3: UI components      │ [████████] 60min │  │
-│                              └──────────────────┘  │
+│ Phase 2 (parallel):          ┌──────────────────┐   │
+│   Task 2: DB schema          │ 8min             │   │
+│   Task 3: UI components      │ 15min            │   │
+│                              └──────────────────┘   │
 │ Phase 3 (sequential):                               │
-│   Task 4: Integration        [████████] 20 min     │
+│   Task 4: Integration         5 min                 │
 └─────────────────────────────────────────────────────┘
-Total: 125 minutes (19% faster)
+Total: 32 minutes (20% faster)
 ```
 
 **How it works:**
@@ -178,8 +178,8 @@ docs/constitutions/
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    USER DESCRIBES FEATURE                        │
-│        "Add real-time notifications with WebSocket"              │
+│                    USER DESCRIBES FEATURE                       │
+│        "Add real-time notifications with WebSocket"             │
 └───────────────────────────┬─────────────────────────────────────┘
                             ▼
                     ┌───────────────┐
@@ -187,18 +187,18 @@ docs/constitutions/
                     └───────┬───────┘
                             ▼
         ┌───────────────────────────────────────┐
-        │   SPECIFICATION GENERATION             │
-        │                                        │
+        │   SPECIFICATION GENERATION            │
+        │                                       │
         │  1. Brainstorm (understanding,        │
-        │     exploration, design)               │
-        │  2. Read constitutions/current/        │
-        │  3. Analyze codebase patterns          │
-        │  4. Generate spec.md with:             │
-        │     - Requirements                     │
-        │     - Architecture decisions           │
-        │     - Acceptance criteria              │
-        │     - Constitution references          │
-        │                                        │
+        │     exploration, design)              │
+        │  2. Read constitutions/current/       │
+        │  3. Analyze codebase patterns         │
+        │  4. Generate spec.md with:            │
+        │     - Requirements                    │
+        │     - Architecture decisions          │
+        │     - Acceptance criteria             │
+        │     - Constitution references         │
+        │                                       │
         │  Output: specs/{id}-{name}/spec.md    │
         └───────────────┬───────────────────────┘
                         ▼
@@ -207,16 +207,16 @@ docs/constitutions/
                 └───────┬───────┘
                         ▼
         ┌───────────────────────────────────────┐
-        │   TASK DECOMPOSITION                   │
-        │                                        │
-        │  1. Break spec into tasks              │
-        │  2. Extract file dependencies          │
-        │  3. Identify conflicts                 │
-        │  4. Group into phases:                 │
-        │     • Sequential (shared files)        │
-        │     • Parallel (independent files)     │
-        │  5. Calculate time savings             │
-        │                                        │
+        │   TASK DECOMPOSITION                  │
+        │                                       │
+        │  1. Break spec into tasks             │
+        │  2. Extract file dependencies         │
+        │  3. Identify conflicts                │
+        │  4. Group into phases:                │
+        │     • Sequential (shared files)       │
+        │     • Parallel (independent files)    │
+        │  5. Calculate time savings            │
+        │                                       │
         │  Output: specs/{id}-{name}/plan.md    │
         └───────────────┬───────────────────────┘
                         ▼
@@ -229,34 +229,34 @@ docs/constitutions/
         │                                        │
         │  For each phase:                       │
         │                                        │
-        │  ┌──────────────────────────────────┐ │
-        │  │ SEQUENTIAL PHASE                 │ │
-        │  │ • Create shared worktree         │ │
-        │  │ • Install dependencies           │ │
-        │  │ • Run tasks in order             │ │
-        │  │   Each task:                     │ │
-        │  │   - Subagent with spec context   │ │
-        │  │   - Implement changes            │ │
-        │  │   - Run quality checks           │ │
-        │  │   - Create git-spice branch      │ │
-        │  │ • Stack branches                 │ │
-        │  │ • Code review                    │ │
-        │  └──────────────────────────────────┘ │
+        │  ┌──────────────────────────────────┐  │
+        │  │ SEQUENTIAL PHASE                 │  │
+        │  │ • Create shared worktree         │  │
+        │  │ • Install dependencies           │  │
+        │  │ • Run tasks in order             │  │
+        │  │   Each task:                     │  │
+        │  │   - Subagent with spec context   │  │
+        │  │   - Implement changes            │  │
+        │  │   - Run quality checks           │  │
+        │  │   - Create git-spice branch      │  │
+        │  │ • Stack branches                 │  │
+        │  │ • Code review                    │  │
+        │  └──────────────────────────────────┘  │
         │                                        │
-        │  ┌──────────────────────────────────┐ │
-        │  │ PARALLEL PHASE                   │ │
-        │  │ • Create worktree per task       │ │
-        │  │ • Install dependencies (each)    │ │
-        │  │ • Spawn subagents simultaneously │ │
-        │  │   Each subagent:                 │ │
-        │  │   - Fresh spec context           │ │
-        │  │   - Isolated worktree            │ │
-        │  │   - Independent execution        │ │
-        │  │   - Quality checks               │ │
-        │  │   - Git-spice branch + detach    │ │
-        │  │ • Stack branches linearly        │ │
-        │  │ • Code review                    │ │
-        │  └──────────────────────────────────┘ │
+        │  ┌──────────────────────────────────┐  │
+        │  │ PARALLEL PHASE                   │  │
+        │  │ • Create worktree per task       │  │
+        │  │ • Install dependencies (each)    │  │
+        │  │ • Spawn subagents simultaneously │  │
+        │  │   Each subagent:                 │  │
+        │  │   - Fresh spec context           │  │
+        │  │   - Isolated worktree            │  │
+        │  │   - Independent execution        │  │
+        │  │   - Quality checks               │  │
+        │  │   - Git-spice branch + detach    │  │
+        │  │ • Stack branches linearly        │  │
+        │  │ • Code review                    │  │
+        │  └──────────────────────────────────┘  │
         │                                        │
         │  Quality Gates (after each phase):     │
         │  ✓ Tests pass                          │
@@ -266,7 +266,7 @@ docs/constitutions/
         │  ✓ Constitution compliance             │
         └────────────────┬───────────────────────┘
                          ▼
-             ┌───────────────────────┐
+             ┌────────────────────────┐
              │  STACKED PULL REQUESTS │
              └───────────┬────────────┘
                          ▼
@@ -307,15 +307,15 @@ Hour 4: System prompt + recent code only        ← No anchor, making things up
 Each Task Subagent:
 ┌────────────────────────────────────────┐
 │ Context:                               │
-│ • Full specification (always present) │
-│ • Constitution rules (always present) │
-│ • This task's requirements            │
-│ • Relevant code files                 │
+│ • Full specification (always present)  │
+│ • Constitution rules (always present)  │
+│ • This task's requirements             │
+│ • Relevant code files                  │
 │                                        │
 │ NOT included:                          │
-│ • Previous task implementations       │
-│ • Orchestrator's conversation history │
-│ • Other tasks' context                │
+│ • Previous task implementations        │
+│ • Orchestrator's conversation history  │
+│ • Other tasks' context                 │
 └────────────────────────────────────────┘
 
 Every task starts with the same foundation.
@@ -397,11 +397,11 @@ Both can run npm/bun install, tests, linting independently.
 
 **Why worktrees instead of branches?**
 
-| Approach | Pros | Cons |
-|----------|------|------|
-| **Switch branches** | Simple | Can't run in parallel (one working dir) |
-| **Clone repo 3x** | Parallel execution | Slow, disk-intensive, complex |
-| **Git worktrees** | Parallel + fast + shared .git | Perfect for this use case |
+| Approach            | Pros                          | Cons                                    |
+| ------------------- | ----------------------------- | --------------------------------------- |
+| **Switch branches** | Simple                        | Can't run in parallel (one working dir) |
+| **Clone repo 3x**   | Parallel execution            | Slow, disk-intensive, complex           |
+| **Git worktrees**   | Parallel + fast + shared .git | Perfect for this use case               |
 
 #### The Parallel Execution Flow
 
@@ -409,7 +409,7 @@ Both can run npm/bun install, tests, linting independently.
 Orchestrator (main process):
   ┌─────────────────────────────────────────────────┐
   │ 1. Read plan                                    │
-  │ 2. Identify Phase 2 has tasks 2, 3 (parallel)  │
+  │ 2. Identify Phase 2 has tasks 2, 3 (parallel)   │
   │ 3. Create worktrees:                            │
   │    • .worktrees/abc123-task-2                   │
   │    • .worktrees/abc123-task-3                   │
@@ -447,9 +447,10 @@ Sequential: `sum(all task times)`
 Parallel: `max(task times per phase) for each phase`
 
 Real example:
-- Sequential: 45m + 30m + 60m + 20m = 155m
-- Parallel: 45m + max(30m, 60m) + 20m = 125m
-- **Savings: 30 minutes (19% faster)**
+
+- Sequential: 12m + 8m + 15m + 5m = 40m
+- Parallel: 12m + max(8m, 15m) + 5m = 32m
+- **Savings: 8 minutes (20% faster)**
 
 With 10 independent tasks, savings can exceed 50%.
 
@@ -466,21 +467,22 @@ Code Review Subagent:
 │ • This phase's git branches                     │
 │                                                 │
 │ Checks:                                         │
-│ ✓ All acceptance criteria met                  │
-│ ✓ Constitution patterns followed               │
-│ ✓ No file conflicts (parallel tasks)           │
+│ ✓ All acceptance criteria met                   │
+│ ✓ Constitution patterns followed                │
+│ ✓ No file conflicts (parallel tasks)            │
 │ ✓ Tests pass                                    │
-│ ✓ Code quality standards                       │
+│ ✓ Code quality standards                        │
 │                                                 │
 │ Output:                                         │
-│ • APPROVED → Continue to next phase            │
-│ • ISSUES FOUND → Fix before proceeding         │
+│ • APPROVED → Continue to next phase             │
+│ • ISSUES FOUND → Fix before proceeding          │
 └─────────────────────────────────────────────────┘
 ```
 
 **Why this matters for long runs:**
 
 Without quality gates:
+
 ```
 Task 1: Minor bug introduced          [small problem]
 Task 2: Builds on Task 1              [bug persists]
@@ -489,6 +491,7 @@ Task 4: Integration fails             [3 hours wasted]
 ```
 
 With quality gates:
+
 ```
 Task 1: Minor bug introduced          [detected by review]
   → Fix immediately (5 min)           [problem solved]
@@ -497,20 +500,35 @@ Task 3: Continues cleanly             [no issues]
 Task 4: Integration succeeds          [feature complete]
 ```
 
-## Installation
+## When to Use Spectacular
 
-### Prerequisites
+### Perfect For
 
-- **Claude Code** - AI-native development environment
-- **Git** - Version control
-- **Node.js/npm** or **Bun** - For projects using setup commands
+- ✅ **Complex features** - Work taking >30 minutes with multiple independent pieces
+- ✅ **Exploratory/prototyping work** - Spec anchoring keeps exploration focused and traceable
+- ✅ **Large refactors** - Break monoliths into parallel tasks with clear acceptance criteria
+- ✅ **Migrations** - REST→GraphQL, Prisma→Drizzle, etc. with automatic task orchestration
+- ✅ **Projects with documented patterns** - Constitutions prevent AI from hallucinating architecture
 
-### 1. Install Dependencies
+### Skip It For
+
+- ❌ **Quick bug fixes** - <10 minute changes don't benefit from the overhead
+- ❌ **Single-file changes** - No parallelization opportunity, spec is overkill
+- ❌ **Emergency hotfixes** - When speed matters more than process
+- ❌ **Poorly-defined requirements** - Run `/spectacular:spec` first to clarify, then execute
+
+**Rule of thumb:** If the work can be decomposed into 3+ independent tasks, spectacular will save significant time.
+
+## Installation & Quick Start
+
+### 1. Install Prerequisites
 
 ```bash
-# In Claude Code, install superpowers plugin
+# In Claude Code, install plugins
 /plugin marketplace add obra/superpowers-marketplace
 /plugin install superpowers@superpowers-marketplace
+/plugin marketplace add arittr/spectacular
+/plugin install spectacular@spectacular
 
 # Install git-spice (macOS)
 brew install git-spice
@@ -519,36 +537,25 @@ brew install git-spice
 curl -fsSL https://abhinav.github.io/git-spice/install.sh | sh
 ```
 
-### 2. Install Spectacular
-
-```bash
-# In Claude Code
-/plugin marketplace add arittr/spectacular
-/plugin install spectacular@spectacular
-```
-
-### 3. Initialize Your Project
+### 2. Initialize Your Project
 
 ```bash
 # In your project directory
 /spectacular:init
 ```
 
-This command:
-- ✓ Validates superpowers and git-spice are installed
-- ✓ Checks you're in a git repository
-- ✓ Adds `.worktrees/` to `.gitignore`
-- ✓ Initializes git-spice tracking
+This validates dependencies and configures git-spice.
 
-## Quick Start
+### 3. Try It Out
 
-### 1. Generate a Specification
+Generate a spec:
 
 ```bash
 /spectacular:spec "user authentication with magic links and session management"
 ```
 
 **What happens:**
+
 - Brainstorms requirements and architecture
 - Reads your constitutions (if they exist)
 - Analyzes codebase patterns
@@ -556,144 +563,65 @@ This command:
 - Commits to isolated worktree branch
 
 **Output example:**
+
 ```markdown
 # User Authentication with Magic Links
 
 ## Requirements
+
 - Passwordless authentication via email magic links
 - Session management with secure cookies
 - Email service integration
-...
+  ...
 
 ## Architecture
+
 Following constitution v2 patterns:
+
 - Next.js Server Actions for auth endpoints
 - Prisma for user/session storage
 - Edge-compatible session validation
-...
+  ...
 
 ## Acceptance Criteria
+
 - [ ] User can request magic link via email
 - [ ] Link expires after 10 minutes
 - [ ] Session persists across browser restarts
-...
+      ...
 ```
 
-### 2. Create Implementation Plan
+Create a plan:
 
 ```bash
 /spectacular:plan @specs/abc123-user-auth/spec.md
 ```
 
-**What happens:**
-- Decomposes spec into concrete tasks
-- Analyzes file dependencies
-- Groups into sequential/parallel phases
-- Calculates estimated time savings
-- Generates `specs/abc123-user-auth/plan.md`
-
-**Output example:**
-```markdown
-# Implementation Plan
-
-## Phase 1 (Sequential) - Foundation
-**Reason**: Database schema must exist before other work
-
-### Task 1.1: Database Schema
-Files:
-  - prisma/schema.prisma
-  - src/db/types.ts
-Acceptance: User and Session models exist
-
-## Phase 2 (Parallel) - Independent Features
-**Reason**: No file conflicts, can run simultaneously
-
-### Task 2.1: Email Service
-Files:
-  - src/services/email.ts
-  - src/lib/email-templates.ts
-
-### Task 2.2: Auth Server Actions
-Files:
-  - src/app/auth/actions.ts
-  - src/app/auth/route.ts
-
-### Task 2.3: Session Middleware
-Files:
-  - src/middleware.ts
-  - src/lib/session.ts
-
-**Parallelization**: 3 tasks, estimated 40% time savings
-
-## Phase 3 (Sequential) - Integration
-**Reason**: Depends on all Phase 2 components
-
-### Task 3.1: Integration Tests
-Files:
-  - tests/auth.test.ts
-  - tests/session.test.ts
-```
-
-### 3. Execute the Plan
+Execute it:
 
 ```bash
 /spectacular:execute @specs/abc123-user-auth/plan.md
 ```
 
-**What happens:**
-- Reads plan and creates execution strategy
-- For each phase:
-  - Creates worktrees (parallel) or shared worktree (sequential)
-  - Installs dependencies from CLAUDE.md setup commands
-  - Spawns subagents with spec context
-  - Each subagent: implements → tests → commits → creates branch
-  - Stacks branches via git-spice
-  - Code review validates against spec
-- All phases complete → feature done
+**Result:** Stack of focused, reviewable PRs ready to submit with `gs stack submit`.
 
-**Progress indicators:**
-```
-✓ Phase 1: Foundation (1 task, sequential)
-  ✓ Task 1.1: Database Schema - Branch created: abc123-task-1-1-db-schema
-  ✓ Code review: APPROVED
+### About Time Estimates
 
-⚡ Phase 2: Independent Features (3 tasks, parallel)
-  ✓ Task 2.1: Email Service - Branch created: abc123-task-2-1-email
-  ✓ Task 2.2: Auth Server Actions - Branch created: abc123-task-2-2-auth
-  ✓ Task 2.3: Session Middleware - Branch created: abc123-task-2-3-session
-  ✓ Code review: APPROVED
+The time estimates shown throughout this README (12 min, 36 min, etc.) assume:
 
-✓ Phase 3: Integration (1 task, sequential)
-  ✓ Task 3.1: Integration Tests - Branch created: abc123-task-3-1-tests
-  ✓ Code review: APPROVED
+- ✅ Codebase with clear patterns and constitutions
+- ✅ Well-defined requirements in spec
+- ✅ Tasks properly scoped (M-sized, 10-15 min each)
+- ✅ Minimal debugging and iteration needed
 
-✅ Feature complete: abc123-user-auth
-   Branches: 5
-   Time saved: ~35 minutes via parallelization
-   Next: gs stack submit
-```
+**In practice, budget 1.5-2x these estimates:**
 
-### 4. Submit Stacked PRs
+- First features take longer (agents learning your constitution)
+- Complex integrations add overhead
+- Quality check failures require rework
+- Exploratory work needs iteration
 
-```bash
-# View the stack
-gs log short
-
-# Submit all branches as PRs
-gs stack submit
-```
-
-**Result:**
-```
-Created 5 pull requests:
-  #234: [Task 1.1] Database Schema
-  #235: [Task 2.1] Email Service (stacked on #234)
-  #236: [Task 2.2] Auth Server Actions (stacked on #234)
-  #237: [Task 2.3] Session Middleware (stacked on #234)
-  #238: [Task 3.1] Integration Tests (stacked on #235, #236, #237)
-```
-
-Each PR is small (~200-500 lines), focused, and reviewable.
+Real-world example: A 40-minute estimate becomes 60-80 minutes actual, but still faster than 120+ minutes sequential.
 
 ## Complete Workflow Example
 
@@ -708,6 +636,7 @@ Each PR is small (~200-500 lines), focused, and reviewable.
 ```
 
 Spectacular:
+
 - Analyzes the existing `routes.ts` file
 - Reads your constitution's architecture patterns
 - Generates a spec with:
@@ -716,31 +645,35 @@ Spectacular:
   - Migration strategy (keep old routes working during refactor)
 
 **Generated spec** (excerpt):
+
 ```markdown
 # API Refactoring: Domain Modules
 
 ## Current State
+
 - src/api/routes.ts (800 lines, mixed concerns)
 - All business logic in route handlers
 - No separation of concerns
 
 ## Target Architecture
-Following constitution v3 clean architecture:
 
+Following constitution v3 clean architecture:
 ```
+
 src/api/
 ├── user/
-│   ├── routes.ts      (Express routing)
-│   ├── controller.ts  (Request/response handling)
-│   └── service.ts     (Business logic)
+│ ├── routes.ts (Express routing)
+│ ├── controller.ts (Request/response handling)
+│ └── service.ts (Business logic)
 ├── product/
-│   ├── routes.ts
-│   ├── controller.ts
-│   └── service.ts
+│ ├── routes.ts
+│ ├── controller.ts
+│ └── service.ts
 └── order/
-    ├── routes.ts
-    ├── controller.ts
-    └── service.ts
+├── routes.ts
+├── controller.ts
+└── service.ts
+
 ```
 
 ## Acceptance Criteria
@@ -758,71 +691,94 @@ src/api/
 ```
 
 **Generated plan**:
+
 ```markdown
 # Implementation Plan
 
 ## Phase 1 (Parallel) - Extract Domain Services
+
 **Reason**: No file conflicts - creating new files
 
 ### Task 1.1: User Service Layer
+
 Files:
-  - src/api/user/service.ts (new)
-  - src/api/user/types.ts (new)
-Acceptance: All user business logic extracted
+
+- src/api/user/service.ts (new)
+- src/api/user/types.ts (new)
+  Acceptance: All user business logic extracted
 
 ### Task 1.2: Product Service Layer
+
 Files:
-  - src/api/product/service.ts (new)
-  - src/api/product/types.ts (new)
+
+- src/api/product/service.ts (new)
+- src/api/product/types.ts (new)
 
 ### Task 1.3: Order Service Layer
-Files:
-  - src/api/order/service.ts (new)
-  - src/api/order/types.ts (new)
 
-**Time estimate**: 3 tasks × 45 min = 135 min sequential
-**Parallel execution**: max(45, 45, 45) = 45 min
-**Savings**: 90 minutes
+Files:
+
+- src/api/order/service.ts (new)
+- src/api/order/types.ts (new)
+
+**Time estimate**: 3 tasks × 10 min = 30 min sequential
+**Parallel execution**: max(10, 10, 10) = 10 min
+**Savings**: 20 minutes
 
 ## Phase 2 (Parallel) - Create Controllers
+
 **Reason**: Independent - new files, different domains
 
 ### Task 2.1: User Controller
+
 Files:
-  - src/api/user/controller.ts (new)
+
+- src/api/user/controller.ts (new)
 
 ### Task 2.2: Product Controller
+
 Files:
-  - src/api/product/controller.ts (new)
+
+- src/api/product/controller.ts (new)
 
 ### Task 2.3: Order Controller
-Files:
-  - src/api/order/controller.ts (new)
 
-**Savings**: 60 minutes
+Files:
+
+- src/api/order/controller.ts (new)
+
+**Savings**: 16 minutes
 
 ## Phase 3 (Parallel) - Create Route Modules
+
 **Reason**: Independent - new files
 
 ### Task 3.1-3.3: Route modules...
-**Savings**: 60 minutes
+
+**Savings**: 16 minutes
 
 ## Phase 4 (Sequential) - Integration
+
 **Reason**: Modifies shared index file
 
 ### Task 4.1: Update API Index
+
 Files:
-  - src/api/index.ts (modify)
-  - src/api/routes.ts (deprecate)
+
+- src/api/index.ts (modify)
+- src/api/routes.ts (deprecate)
 
 ### Task 4.2: Integration Tests
+
 Files:
-  - tests/api/integration.test.ts
+
+- tests/api/integration.test.ts
 
 **Total estimated time**:
-- Sequential: 315 minutes (5.25 hours)
-- Parallel: 105 minutes (1.75 hours)
-- **Savings: 210 minutes (3.5 hours, 67% faster)**
+
+- Sequential: 88 minutes
+- Parallel: 36 minutes
+- **Savings: 52 minutes (59% faster)**
 ```
 
 #### Step 3: Execute
@@ -839,37 +795,37 @@ Files:
           Installing dependencies in each...
           Spawning 3 subagents...
 
-[11:05 AM] Subagent 1 (User Service):
+[11:03 AM] Subagent 1 (User Service):
           ✓ Extracted 15 user functions to service.ts
           ✓ Created UserService class
           ✓ Unit tests passing
           ✓ Branch: a1b2c3-task-1-1-user-service
 
-[11:12 AM] Subagent 2 (Product Service):
+[11:07 AM] Subagent 2 (Product Service):
           ✓ Extracted 12 product functions
           ✓ ProductService with inventory methods
           ✓ Unit tests passing
           ✓ Branch: a1b2c3-task-1-2-product-service
 
-[11:18 AM] Subagent 3 (Order Service):
+[11:10 AM] Subagent 3 (Order Service):
           ✓ Extracted 18 order functions
           ✓ OrderService with payment integration
           ✓ Unit tests passing
           ✓ Branch: a1b2c3-task-1-3-order-service
 
-[11:20 AM] Phase 1 complete (20 min)
+[11:10 AM] Phase 1 complete (10 min)
           Code review: ✓ APPROVED
           All services follow clean architecture
           No business logic in controllers
           Test coverage: 94%
 
-[11:20 AM] Phase 2: Create Controllers (parallel)
+[11:10 AM] Phase 2: Create Controllers (parallel)
           ...
 
-[12:45 PM] ✅ Refactor complete
-          Total time: 1 hour 45 minutes
-          Would have taken: 5 hours 15 minutes sequentially
-          Saved: 3.5 hours
+[11:36 AM] ✅ Refactor complete
+          Total time: 36 minutes
+          Would have taken: 88 minutes sequentially
+          Saved: 52 minutes
 
           Created 11 branches in stack
           Next step: gs stack submit
@@ -908,11 +864,13 @@ gs stack submit
 **Purpose**: Validate environment and configure project
 
 **Usage**:
+
 ```bash
 /spectacular:init
 ```
 
 **What it does**:
+
 - ✓ Checks superpowers plugin installed
 - ✓ Checks git-spice installed
 - ✓ Verifies git repository
@@ -921,6 +879,7 @@ gs stack submit
 - ✓ Validates directory structure
 
 **When to run**:
+
 - First time using spectacular in a project
 - After installing spectacular
 - When setting up a new repository
@@ -932,6 +891,7 @@ gs stack submit
 **Purpose**: Generate feature specification from natural language
 
 **Usage**:
+
 ```bash
 /spectacular:spec "feature description"
 
@@ -942,6 +902,7 @@ gs stack submit
 ```
 
 **What it does**:
+
 1. Brainstorms requirements (understanding, exploration, design)
 2. Reads `docs/constitutions/current/` if exists
 3. Analyzes codebase for existing patterns
@@ -956,16 +917,19 @@ gs stack submit
 7. Commits to `{runId}-main` branch
 
 **Output**:
+
 - Spec file path
 - Run ID (6-char hash for namespacing)
 - Next step: `/spectacular:plan`
 
 **Options**:
+
 - Natural language descriptions work best
 - Be specific about technical requirements
 - Mention existing patterns to follow
 
 **Pro tips**:
+
 - Front-load context: "Following our tRPC pattern, add..."
 - Reference files: "Like auth.ts, but for products"
 - Specify constraints: "Must work without breaking existing API"
@@ -977,6 +941,7 @@ gs stack submit
 **Purpose**: Decompose specification into executable plan with automatic dependency analysis
 
 **Usage**:
+
 ```bash
 /spectacular:plan @specs/{runId}-{feature}/spec.md
 
@@ -985,6 +950,7 @@ gs stack submit
 ```
 
 **What it does**:
+
 1. Reads specification
 2. Decomposes into concrete tasks with:
    - Exact file paths (no wildcards)
@@ -1001,26 +967,34 @@ gs stack submit
 7. Commits to worktree branch
 
 **Output**:
+
 ```markdown
 ## Phase 1 (Sequential) - Foundation
+
 ### Task 1.1: Database Schema
+
 Files: prisma/schema.prisma, src/db/types.ts
 Acceptance: Message and Room models created
 
 ## Phase 2 (Parallel) - Independent Features
+
 ### Task 2.1: WebSocket Server
+
 Files: src/server/websocket.ts, src/server/index.ts
 
 ### Task 2.2: Message UI Component
+
 Files: src/components/Chat.tsx, src/components/MessageList.tsx
 
 ### Task 2.3: Room Management
+
 Files: src/lib/rooms.ts, src/hooks/useRoom.ts
 
 Time savings: 45 minutes (35% faster)
 ```
 
 **Quality rules enforced**:
+
 - No XL tasks (>8 hours) - must split
 - All tasks have explicit file paths
 - All tasks have acceptance criteria
@@ -1033,6 +1007,7 @@ Time savings: 45 minutes (35% faster)
 **Purpose**: Execute implementation plan with automatic orchestration
 
 **Usage**:
+
 ```bash
 /spectacular:execute @specs/{runId}-{feature}/plan.md
 
@@ -1048,6 +1023,7 @@ Time savings: 45 minutes (35% faster)
 For each phase in the plan:
 
 **Sequential Phase**:
+
 1. Create shared worktree: `.worktrees/{runId}-phase-{id}`
 2. Check CLAUDE.md for setup commands
 3. Install dependencies + run postinstall (codegen)
@@ -1062,6 +1038,7 @@ For each phase in the plan:
 7. Clean up worktree
 
 **Parallel Phase**:
+
 1. Create worktree per task: `.worktrees/{runId}-task-{id}`
 2. Install dependencies in EACH worktree
 3. Spawn subagents simultaneously (one per task)
@@ -1078,6 +1055,7 @@ For each phase in the plan:
 7. Clean up all worktrees
 
 **Quality gates** (after each phase):
+
 - ✓ All tests pass
 - ✓ Linting passes
 - ✓ Build succeeds
@@ -1086,11 +1064,13 @@ For each phase in the plan:
 - ✓ Constitution compliance verified
 
 **Error handling**:
+
 - Task fails → Fix in place, re-run from that task
 - Review fails → Address feedback, re-review
 - Quality check fails → Fix, re-run checks
 
 **Output**:
+
 - Progress updates per phase/task
 - Branch names created
 - Time saved via parallelization
@@ -1098,21 +1078,26 @@ For each phase in the plan:
 - Next step: `gs stack submit`
 
 **Requirements**:
+
 - Project must define setup commands in CLAUDE.md:
+
   ```markdown
   ## Development Commands
 
   ### Setup
+
   - **install**: `bun install`
   - **postinstall**: `npx prisma generate`
 
   ### Quality Checks
+
   - **test**: `bun test`
   - **lint**: `bun run lint`
   - **build**: `bun run build`
   ```
 
 **Pro tips**:
+
 - Use `--permission-mode bypassPermissions` for uninterrupted execution
 - Monitor first phase to ensure setup commands work
 - Resume from any phase if interrupted
@@ -1141,17 +1126,20 @@ Every project using spectacular MUST define setup commands in `CLAUDE.md`:
 ```
 
 **Why required**:
+
 - Each worktree is an isolated directory
 - Worktrees need dependencies installed
 - Codegen (Prisma, GraphQL, etc.) must run
 - Quality checks need working dependencies
 
 **Setup logic**:
+
 - Checks if `node_modules` exists
 - If missing → runs `install`, then `postinstall`
 - If exists → skips (handles resume scenarios)
 
 **When setup runs**:
+
 - After creating main worktree (`/spectacular:spec`)
 - Before tasks in sequential phases
 - Before each task in parallel phases
@@ -1178,6 +1166,7 @@ ln -s v1 docs/constitutions/current
 **Constitution files**:
 
 `meta.md`:
+
 ```markdown
 # Constitution v1
 
@@ -1185,21 +1174,25 @@ ln -s v1 docs/constitutions/current
 **Status**: Active
 
 ## Changes in This Version
+
 - Initial patterns established
 - Clean architecture with 3 layers
 ```
 
 `architecture.md`:
+
 ```markdown
 # Architecture
 
 ## Layer Structure
 ```
+
 API Layer (routes, controllers)
-  ↓
+↓
 Domain Layer (business logic, services)
-  ↓
+↓
 Data Layer (database, external APIs)
+
 ```
 
 ## Rules
@@ -1209,24 +1202,26 @@ Data Layer (database, external APIs)
 ```
 
 `patterns.md`:
-```markdown
+
+````markdown
 # Mandatory Patterns
 
 ## Server Actions
+
 All mutations use Next.js Server Actions with next-safe-action:
 
 ```typescript
-export const createUser = action(
-  schema.createUser,
-  async (input) => {
-    // implementation
-  }
-)
+export const createUser = action(schema.createUser, async (input) => {
+  // implementation
+});
 ```
+````
 
 ## Error Handling
+
 All errors use custom error classes from src/lib/errors.ts
-```
+
+````
 
 `tech-stack.md`:
 ```markdown
@@ -1240,18 +1235,21 @@ All errors use custom error classes from src/lib/errors.ts
 ## Validation
 - Zod (schemas)
 - next-safe-action (server actions)
-```
+````
 
 `testing.md`:
+
 ```markdown
 # Testing Requirements
 
 ## Coverage
+
 - All server actions: Unit tests
 - All API routes: Integration tests
 - Critical flows: E2E tests
 
 ## Tools
+
 - Jest for unit/integration
 - Playwright for E2E
 ```
@@ -1259,6 +1257,7 @@ All errors use custom error classes from src/lib/errors.ts
 **When to version**:
 
 Create a new version when:
+
 - Adding/removing mandatory patterns
 - Changing tech stack (library migrations)
 - Updating layer boundaries
@@ -1279,6 +1278,7 @@ Create a new version when:
 ```
 
 **Benefits**:
+
 - AI can't hallucinate patterns - they're documented
 - Immutable history when rules change
 - Specs reference constitutions (no duplication)
@@ -1289,6 +1289,7 @@ Create a new version when:
 ### Writing Good Specs
 
 **Do**:
+
 - ✓ Reference constitution patterns ("Following clean architecture...")
 - ✓ Link to external docs instead of pasting examples
 - ✓ Focus on WHAT to build, not HOW
@@ -1296,6 +1297,7 @@ Create a new version when:
 - ✓ Mention existing files to follow
 
 **Don't**:
+
 - ✗ Duplicate constitution rules in spec
 - ✗ Paste library documentation
 - ✗ Write implementation steps (that's the plan's job)
@@ -1304,10 +1306,12 @@ Create a new version when:
 **Example**:
 
 Good:
+
 ```markdown
 ## Authentication Flow
 
 Following constitution v2 auth patterns:
+
 - Server actions for login/logout
 - Session cookies via next-safe-action
 - See constitution v2/patterns.md for details
@@ -1316,6 +1320,7 @@ External: [NextAuth.js docs](https://next-auth.js.org)
 ```
 
 Bad:
+
 ```markdown
 ## Authentication Flow
 
@@ -1331,39 +1336,37 @@ And here's the exact code:
 **Target**: M (3-5 hours) tasks
 
 **Good task sizes**:
+
 - **S (1-2h)**: Rare, only for truly standalone work
 - **M (3-5h)**: Sweet spot - complete subsystem or layer
 - **L (5-7h)**: Complex coherent units (full UI layer, complete API surface)
 
 **Avoid**:
+
 - **XL (>8h)**: Always split into M/L tasks
 - **Too many S tasks**: Bundle related work
 
 **Examples**:
 
 Good:
+
 ```markdown
 Task 2.1: API Layer (M - 4h)
-  Files:
-    - src/api/user/routes.ts
-    - src/api/user/controller.ts
-    - src/api/user/validation.ts
-  Acceptance:
-    - All CRUD endpoints working
-    - Validation on all inputs
-    - Error handling complete
+Files: - src/api/user/routes.ts - src/api/user/controller.ts - src/api/user/validation.ts
+Acceptance: - All CRUD endpoints working - Validation on all inputs - Error handling complete
 ```
 
 Bad:
+
 ```markdown
 Task 2.1: User Routes File (S - 1h)
-  Files: src/api/user/routes.ts
+Files: src/api/user/routes.ts
 
 Task 2.2: User Controller File (S - 1h)
-  Files: src/api/user/controller.ts
+Files: src/api/user/controller.ts
 
 Task 2.3: User Validation File (S - 1h)
-  Files: src/api/user/validation.ts
+Files: src/api/user/validation.ts
 ```
 
 Better to bundle these into one coherent "API Layer" task.
@@ -1371,6 +1374,7 @@ Better to bundle these into one coherent "API Layer" task.
 ### When to Use Spectacular
 
 **Good use cases**:
+
 - ✓ Complex features (>3 hours work)
 - ✓ Multiple independent subsystems
 - ✓ Large refactors
@@ -1378,6 +1382,7 @@ Better to bundle these into one coherent "API Layer" task.
 - ✓ Features with clear requirements
 
 **Not ideal for**:
+
 - ✗ Quick bug fixes (<30 min)
 - ✗ Exploratory work (unclear requirements)
 - ✗ Single-file changes
@@ -1414,6 +1419,7 @@ git branch | grep {runId}
 **Cause**: Transition from brainstorming skill to spec generation doesn't happen.
 
 **Solution**:
+
 ```bash
 # Interrupt (Esc)
 # Re-run with same description
@@ -1427,6 +1433,7 @@ Second run typically completes. Brainstorming context from first run helps.
 ### Setup Commands Not Found
 
 **Symptom**:
+
 ```
 ❌ Setup Commands Required
 
@@ -1439,6 +1446,7 @@ Please add to CLAUDE.md...
 **Solution**:
 
 Add to your project's `CLAUDE.md`:
+
 ```markdown
 ## Development Commands
 
@@ -1455,6 +1463,7 @@ Then re-run `/spectacular:execute`.
 ### Worktree Creation Fails
 
 **Symptom**:
+
 ```
 fatal: '.worktrees/abc123-task-1' already exists
 ```
@@ -1462,6 +1471,7 @@ fatal: '.worktrees/abc123-task-1' already exists
 **Cause**: Stale worktree from previous run.
 
 **Solution**:
+
 ```bash
 # List worktrees
 git worktree list
@@ -1485,6 +1495,7 @@ git worktree prune
 **Cause**: Parallel tasks or manual git operations confused the stack.
 
 **Solution**:
+
 ```bash
 # Check current stack
 gs log short
@@ -1510,6 +1521,7 @@ See `skills/using-git-spice/SKILL.md` for detailed troubleshooting.
 **Solution**:
 
 Spectacular stops and reports the issue. Fix in the worktree:
+
 ```bash
 # Navigate to worktree
 cd .worktrees/{runId}-phase-{id}
@@ -1542,6 +1554,7 @@ Execution will resume from the fixed state.
 **Solution**:
 
 Review the feedback, fix in place:
+
 ```bash
 # Check which branch failed review
 gs log short
@@ -1570,10 +1583,12 @@ git commit --amend -m "[Task X] Fixed review feedback"
 **Possible causes**:
 
 1. **Dependency installation bottleneck**:
+
    - Each worktree installs separately
    - Solution: Use faster package manager (bun > npm)
 
 2. **Tasks actually conflict**:
+
    - Check plan for file overlaps
    - Planner might have grouped incorrectly
 
@@ -1588,6 +1603,7 @@ git commit --amend -m "[Task X] Fixed review feedback"
 Spectacular builds on [superpowers](https://github.com/obra/superpowers) - consider contributing to both!
 
 **Areas for contribution**:
+
 - Additional stacking backends (Graphite, etc.)
 - Improved dependency analysis
 - Better parallelization heuristics

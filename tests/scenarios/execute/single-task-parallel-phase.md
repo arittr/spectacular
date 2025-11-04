@@ -78,10 +78,12 @@ Subagent completes successfully, creating branch.
 ```bash
 cd .worktrees/{runid}-main
 
-# Task 1: Base of stack (only task, no upstack onto needed)
+BASE_BRANCH=$(git branch --show-current)
+
+# Task 1: Base of stack (single task)
 git checkout {runid}-task-2-1-user-auth
 gs branch track
-# No upstack onto (it's the first and ONLY task)
+gs upstack onto "$BASE_BRANCH"  # Required for cross-phase correctness
 
 # Verify
 gs log short
@@ -90,9 +92,9 @@ gs log short
 cd "$REPO_ROOT"
 ```
 
-**Critical: Stacking loop runs once, no `gs upstack onto` called**
+**Critical: N=1 requires 1 upstack call (not 0) for cross-phase stacking correctness**
 
-Pattern: For N tasks, N-1 `upstack onto` calls. For N=1, that's 0 upstack calls.
+Pattern: Mathematical N-1=0 for N=1 is correct in isolation, but cross-phase base tracking requires explicit `upstack onto` even for single tasks. Cross-phase correctness trumps pattern elegance.
 
 ### Cleanup
 
@@ -131,9 +133,10 @@ gs ls
 
 ### Stacking Logic
 - [ ] Stacking runs without error
-- [ ] Task 1 gets `gs branch track` only (no upstack onto)
+- [ ] Task 1 gets `gs branch track` + `gs upstack onto BASE_BRANCH` (cross-phase correctness)
 - [ ] No attempts to stack onto non-existent task 0
 - [ ] Verification passes (gs log short)
+- [ ] Linear chain maintained with previous phase
 
 ### Cleanup
 - [ ] Single worktree removed successfully
