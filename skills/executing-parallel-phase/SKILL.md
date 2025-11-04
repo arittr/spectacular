@@ -190,16 +190,17 @@ TASK_COUNT=${#TASK_BRANCHES[@]}
 if [ $TASK_COUNT -eq 1 ]; then
   git checkout "${TASK_BRANCHES[0]}"
   gs branch track
-  # No upstack needed for N=1
+  gs upstack onto "$BASE_BRANCH"  # Explicitly set base for first parallel task
 else
   # Handle N≥2
   for i in "${!TASK_BRANCHES[@]}"; do
     BRANCH="${TASK_BRANCHES[$i]}"
 
     if [ $i -eq 0 ]; then
-      # First task: track only
+      # First task: track and explicitly set base
       git checkout "$BRANCH"
       gs branch track
+      gs upstack onto "$BASE_BRANCH"  # Explicitly stack onto pre-parallel base
     else
       # Subsequent: track + upstack onto previous
       PREV_BRANCH="${TASK_BRANCHES[$((i-1))]}"
