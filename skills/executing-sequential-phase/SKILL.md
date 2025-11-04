@@ -123,15 +123,63 @@ cd "$REPO_ROOT"
 
 **Red flag:** "Run `gs upstack onto` to ensure stacking" - NO. Already stacked naturally.
 
-### Step 4: Code Review
+### Step 4: Code Review (Binary Quality Gate)
 
-**Use `requesting-code-review` skill:**
+**Use `requesting-code-review` skill to call code-reviewer agent, then parse results STRICTLY:**
 
-```
-Skill tool: requesting-code-review
-```
+1. **Dispatch code review:**
+   ```
+   Skill tool: requesting-code-review
+   ```
 
-Phase complete ONLY when code review passes.
+2. **Parse output using binary algorithm:**
+
+   Read the code review output and search for "Ready to merge?" field:
+
+   - ✅ **"Ready to merge? Yes"** → APPROVED
+     - Announce: "✅ Code review APPROVED - Phase {N} complete, proceeding"
+     - Continue to next phase
+
+   - ❌ **"Ready to merge? No"** → REJECTED
+     - STOP execution
+     - Report: "❌ Code review REJECTED - critical issues found"
+     - List all Critical and Important issues from review
+     - Dispatch fix subagent or report to user
+     - Go to step 3 (re-review after fixes)
+
+   - ❌ **"Ready to merge? With fixes"** → REJECTED
+     - STOP execution
+     - Report: "❌ Code review requires fixes before proceeding"
+     - List all issues from review
+     - Dispatch fix subagent or report to user
+     - Go to step 3 (re-review after fixes)
+
+   - ❌ **No output / empty response** → FAILURE
+     - STOP execution
+     - Report: "❌ Code review returned no output - treating as FAILURE"
+     - Suggest: "Check review agent logs, may need to re-run review"
+     - DO NOT proceed
+
+   - ❌ **Soft language (e.g., "APPROVED WITH MINOR SUGGESTIONS")** → REJECTED
+     - STOP execution
+     - Report: "❌ Code review used soft language instead of binary verdict"
+     - Warn: "Binary gate requires explicit 'Ready to merge? Yes'"
+     - Go to step 3 (re-review)
+
+   - ❌ **Missing "Ready to merge?" field** → FAILURE
+     - STOP execution
+     - Report: "❌ Code review output missing 'Ready to merge?' field"
+     - Suggest: "Review agent may not be following template"
+     - Fail execution
+
+3. **Re-review loop (if REJECTED):**
+   - Fix all issues identified by review
+   - Return to step 1 (dispatch review again)
+   - Repeat until "Ready to merge? Yes"
+
+**Critical:** Only "Ready to merge? Yes" allows proceeding. Everything else stops execution.
+
+**Phase complete ONLY when code review returns "Ready to merge? Yes".**
 
 ## The Manual Stacking Anti-Pattern
 
