@@ -527,6 +527,122 @@ The skill's multi-layered defense strategy (Iron Law + Rationalization Table + R
 - ✅ tests.md updated with all results (RED, GREEN, REFACTOR phases documented)
 - ✅ Skill ready for use in execute.md
 
-**Status: COMPLETE - Ready for Production**
+**Status: PRODUCTION BUG DISCOVERED - REOPENING FOR FIX**
 
-The `executing-parallel-phase` skill has passed all TDD phases and is ready to be integrated into execute.md to reduce the command's size from 1212 lines.
+---
+
+## Production Bug Discovery (2025-11-03)
+
+### Bug: First Parallel Task Tracks Against Wrong Base
+
+**Evidence from production execution:**
+```
+BASE_BRANCH detected: 33d0e1-task-1-websocket-foundation (correct)
+Parallel worktrees created FROM task-1 (correct)
+
+After stacking:
+gs log short shows:
+- 33d0e1-task-3-reaction-ui → based on task-2 ✅ CORRECT
+- 33d0e1-task-2-reaction-hook → based on 33d0e1-main ❌ WRONG (should be task-1)
+```
+
+**Expected:**
+```
+- task-3 → task-2 → task-1 → main (linear chain)
+```
+
+**Actual:**
+```
+- task-3 → task-2 → main (task-1 orphaned)
+  task-1 → main
+```
+
+**Root cause:**
+```bash
+# Current stacking code (Step 6, first task):
+if [ $i -eq 0 ]; then
+  git checkout "$BRANCH"
+  gs branch track  # <-- Infers base, guesses wrong
+fi
+```
+
+When `gs branch track` runs without explicit base:
+1. Branch was created in detached worktree
+2. git-spice doesn't know original base intent
+3. Commit exists on both `task-1` and `main`
+4. git-spice guesses `main` (wrong)
+
+**Fix:**
+```bash
+if [ $i -eq 0 ]; then
+  git checkout "$BRANCH"
+  gs branch track
+  gs upstack onto "$BASE_BRANCH"  # <-- Explicitly set base
+fi
+```
+
+**Testing plan:**
+- Update skill with fix
+- Use testing-skills-with-subagents to verify fix
+- Scenario: 2 parallel tasks after 1 sequential task
+- Verify: task-2 stacks on task-1, not main
+
+---
+
+## REFACTOR Phase - Iteration 2 (Bug Fix)
+
+### GREEN Phase: Fix Verification (2025-11-03)
+
+**Test scenario:** Simulate parallel phase after sequential task
+- Sequential task-1 creates `abc123-task-1-websocket-foundation`
+- 2 parallel tasks (task-2, task-3) should stack onto task-1
+
+**Test method:** Subagent simulation in `/tmp/parallel-stacking-test`
+- Created git repo with git-spice
+- Simulated sequential task creating foundation branch
+- Created 2 parallel branches in detached state (simulating worktree execution)
+- Applied FIXED stacking algorithm from skill
+
+**Results:**
+
+✅ **FIX VERIFIED - All checks passed:**
+
+1. **First parallel task base**: task-2 correctly based on task-1 ✅
+2. **Second parallel task base**: task-3 correctly based on task-2 ✅
+3. **Linear stack structure**: `gs log short` shows proper chain ✅
+4. **Git commit history**: Correct parent relationships ✅
+
+**Stack structure achieved:**
+```
+      ┏━■ abc123-task-3-reaction-ui ◀
+    ┏━┻□ abc123-task-2-reaction-hook
+  ┏━┻□ abc123-task-1-websocket-foundation
+┏━┻□ abc123-main
+main
+```
+
+**Before fix:** task-2 would incorrectly base on `abc123-main`
+**After fix:** task-2 correctly bases on `task-1-websocket-foundation`
+
+**Fix effectiveness:**
+- N=1 case: `gs upstack onto "$BASE_BRANCH"` added (line 193)
+- N≥2 case: `gs upstack onto "$BASE_BRANCH"` added for first task (line 203)
+- Both cases now explicitly set base instead of relying on git-spice auto-detection
+
+---
+
+## REFACTOR Phase - Iteration 2 Complete
+
+### Final Status
+
+**Bug:** First parallel task tracks wrong base ❌
+**Fix:** Explicit `gs upstack onto "$BASE_BRANCH"` for first parallel task ✅
+**Verification:** Subagent test passed ✅
+
+**No new rationalizations discovered** - fix is straightforward algorithmic correction, not behavioral loophole.
+
+**Updated sections in SKILL.md:**
+- Step 6 stacking algorithm (lines 189-212)
+- Both N=1 and N≥2 cases updated
+
+**Skill status:** READY FOR PRODUCTION (bug fixed, verified)
