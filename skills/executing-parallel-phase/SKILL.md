@@ -39,29 +39,50 @@ PARALLEL PHASE = WORKTREES + SUBAGENTS
 
 **Announce:** "I'm using executing-parallel-phase to orchestrate {N} concurrent tasks in Phase {phase-id}."
 
-### Step 1: Verify Location (MANDATORY)
+### Step 1: Pre-Conditions Verification (MANDATORY)
 
-**Before ANY worktree creation:**
+**Before ANY worktree creation, verify the environment is correct:**
 
 ```bash
 # Get main repo root
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
-# CRITICAL: Verify not in a worktree
+# Check 1: Verify current location
+echo "Current location: $(pwd)"
+echo "Repo root: $REPO_ROOT"
+
+# Check 2: Verify main repo is repo root (not in a worktree)
 if [[ "$REPO_ROOT" =~ \.worktrees ]]; then
   echo "❌ Error: Currently in worktree, must run from main repo"
   echo "Current: $REPO_ROOT"
   exit 1
 fi
 
+# Check 3: Verify main worktree exists
+if [ ! -d "$REPO_ROOT/.worktrees/{runid}-main" ]; then
+  echo "❌ Error: Main worktree not found at .worktrees/{runid}-main"
+  echo "Run /spectacular:spec first to create the workspace."
+  exit 1
+fi
+
+# Check 4: Verify main branch exists
+if ! git rev-parse --verify {runid}-main >/dev/null 2>&1; then
+  echo "❌ Error: Branch {runid}-main does not exist"
+  echo "Spec must be created before executing parallel phase."
+  exit 1
+fi
+
 # Navigate to verified location
 cd "$REPO_ROOT"
-pwd  # Should show main repo path
+echo "✅ Pre-conditions verified - safe to create task worktrees"
 ```
 
-**Why mandatory:** Running from inside a worktree creates nested worktrees in wrong location.
+**Why mandatory:**
+- Prevents nested worktrees from wrong location (9f92a8 regression)
+- Catches missing prerequisites before wasting time on worktree creation
+- Provides clear error messages for common setup issues
 
-**Red flag:** "Git commands work from anywhere" - TRUE, but path resolution is CWD-relative.
+**Red flag:** "Skip verification to save time" - NO. 20ms verification saves hours of debugging.
 
 ### Step 2: Create Worktrees (BEFORE Subagents)
 
