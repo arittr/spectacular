@@ -282,7 +282,60 @@ git worktree list | grep "{runid}-task-"
 
 ### Step 8: Code Review (Binary Quality Gate)
 
-**Use `requesting-code-review` skill to call code-reviewer agent, then parse results STRICTLY:**
+**Check review frequency setting (from execute.md Step 1.7):**
+
+```bash
+REVIEW_FREQUENCY=${REVIEW_FREQUENCY:-per-phase}
+```
+
+**If REVIEW_FREQUENCY is "end-only" or "skip":**
+```
+Skipping per-phase code review (frequency: {REVIEW_FREQUENCY})
+Phase {N} complete - proceeding to next phase
+```
+Mark phase complete and continue to next phase.
+
+**If REVIEW_FREQUENCY is "optimize":**
+
+Analyze the completed phase to decide if code review is needed:
+
+**High-risk indicators (REVIEW REQUIRED):**
+- Schema or migration changes
+- Authentication/authorization logic
+- External API integrations or webhooks
+- Foundation phases (Phase 1-2 establishing patterns)
+- 3+ parallel tasks (coordination complexity)
+- New architectural patterns introduced
+- Security-sensitive code (payment, PII, access control)
+- Complex business logic with multiple edge cases
+- Changes affecting multiple layers (database → API → UI)
+
+**Low-risk indicators (SKIP REVIEW):**
+- Pure UI component additions (no state/logic)
+- Documentation or comment updates
+- Test additions without implementation changes
+- Refactoring with existing test coverage
+- Isolated utility functions
+- Configuration file updates (non-security)
+
+**Analyze this phase:**
+- Phase number: {N}
+- Tasks completed in parallel: {task-list}
+- Files modified across tasks: {file-list}
+- Types of changes: {describe changes}
+
+**Decision:**
+If ANY high-risk indicator present → Proceed to code review below
+If ONLY low-risk indicators → Skip review:
+```
+✓ Phase {N} assessed as low-risk - skipping review (optimize mode)
+  Reasoning: {brief explanation of why low-risk}
+Phase {N} complete - proceeding to next phase
+```
+
+**If REVIEW_FREQUENCY is "per-phase" OR optimize mode decided to review:**
+
+Use `requesting-code-review` skill to call code-reviewer agent, then parse results STRICTLY:
 
 1. **Dispatch code review:**
    ```
@@ -336,11 +389,17 @@ git worktree list | grep "{runid}-task-"
 
 **Critical:** Only "Ready to merge? Yes" allows proceeding. Everything else stops execution.
 
-**Phase is complete ONLY when:**
-- ✅ All branches created
-- ✅ Linear stack verified
-- ✅ Worktrees cleaned up
-- ✅ Code review returns "Ready to merge? Yes"
+**Phase completion:**
+- If `REVIEW_FREQUENCY="per-phase"`: Phase complete ONLY when:
+  - ✅ All branches created
+  - ✅ Linear stack verified
+  - ✅ Worktrees cleaned up
+  - ✅ Code review returns "Ready to merge? Yes"
+- If `REVIEW_FREQUENCY="end-only"` or `"skip"`: Phase complete when:
+  - ✅ All branches created
+  - ✅ Linear stack verified
+  - ✅ Worktrees cleaned up
+  - (Code review skipped)
 
 ## Rationalization Table
 

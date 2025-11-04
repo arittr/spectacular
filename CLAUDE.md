@@ -171,6 +171,36 @@ cp -r . ~/.claude/plugins/cache/spectacular
 - Script ensures semver format is valid
 - Maintains version consistency for plugin loading
 
+## Configuration
+
+### Environment Variables
+
+#### REVIEW_FREQUENCY
+
+Controls when code reviews run during `/spectacular:execute`:
+
+- **`optimize`** - LLM decides when to review based on phase risk/complexity (RECOMMENDED)
+  - Reviews foundation phases, schema changes, auth logic, security-sensitive code
+  - Skips low-risk phases like UI components, docs, isolated utilities
+  - Balances speed and quality by focusing reviews where they matter most
+- `per-phase` - Review after each phase completes (safest - catches errors early)
+- `end-only` - Review once after all phases complete (faster, but errors may compound)
+- `skip` - No automated reviews (fastest, requires manual review before merging)
+
+**Example:**
+```bash
+export REVIEW_FREQUENCY=optimize
+/spectacular:execute @specs/abc123-feature/plan.md
+```
+
+If not set, you'll be prompted to choose during execution.
+
+**Impact on execution time:**
+- `per-phase` on 5-phase plan: 5 reviews (~10-25 min)
+- `optimize` on 5-phase plan: 2-3 reviews (~6-15 min) - skips low-risk phases
+- `end-only` on 5-phase plan: 1 review (~2-5 min) - errors may compound
+- `skip`: 0 reviews - manual review required before merging
+
 ## Key Concepts
 
 ### Specifications vs Plans
