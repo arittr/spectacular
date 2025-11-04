@@ -1,8 +1,8 @@
-# Test Scenario: Meta-Testing (Test Command)
+# Test Scenario: Meta-Testing (Test Workflow)
 
 ## Context
 
-Testing `/spectacular:test` command itself - the tool that runs all other test scenarios.
+Testing the spectacular testing workflow (`tests/running-spectacular-tests.md`) - the tool that runs all other test scenarios.
 
 **Setup:**
 - Test fixtures exist (simple-typescript, simple-python)
@@ -11,7 +11,7 @@ Testing `/spectacular:test` command itself - the tool that runs all other test s
 - All Phase 1 dependencies completed
 
 **Why meta-test:**
-- Ensures test command can dispatch subagents correctly
+- Ensures test workflow can dispatch subagents correctly
 - Validates test fixture cloning and isolation
 - Confirms result aggregation and reporting works
 - Tests error handling for missing scenarios/fixtures
@@ -21,10 +21,10 @@ Testing `/spectacular:test` command itself - the tool that runs all other test s
 ### Command Parsing
 
 1. Parse command argument to determine scenario scope:
-   ```bash
-   /spectacular:test execute   # Run only execute scenarios
-   /spectacular:test init      # Run only init scenarios
-   /spectacular:test all       # Run all scenarios
+   ```
+   "Follow tests/running-spectacular-tests.md for the execute command"   # Run only execute scenarios
+   "Follow tests/running-spectacular-tests.md for the init command"      # Run only init scenarios
+   "Run all spectacular test scenarios"                                   # Run all scenarios
    ```
 
 2. If no scenarios found for specified command, report error and exit
@@ -52,7 +52,7 @@ Testing `/spectacular:test` command itself - the tool that runs all other test s
 
 1. Identify all scenarios for specified command:
    ```bash
-   ls tests/scenarios/execute/*.md  # For /spectacular:test execute
+   ls tests/scenarios/execute/*.md  # For execute command
    ```
 
 2. Dispatch one subagent per scenario in parallel using Task tool
@@ -165,8 +165,8 @@ ls .worktrees/test-*  # Should return "No such file or directory"
 ## Success Criteria
 
 ### Command Parsing
-- [ ] `/spectacular:test execute` runs only execute scenarios
-- [ ] `/spectacular:test all` runs scenarios for all commands
+- [ ] Running the workflow for execute command runs only execute scenarios
+- [ ] Running all test scenarios runs scenarios for all commands
 - [ ] Invalid command name returns error and exits gracefully
 - [ ] No scenarios for command returns helpful error
 
@@ -198,15 +198,15 @@ ls .worktrees/test-*  # Should return "No such file or directory"
 **Using:** Manual verification (cannot use testing-workflows-with-subagents for the test command itself)
 
 **Command:**
-```bash
+```
 # Test with single command
-/spectacular:test execute
+"Follow tests/running-spectacular-tests.md for the execute command"
 
 # Test with all commands
-/spectacular:test all
+"Run all spectacular test scenarios"
 
 # Test error handling
-/spectacular:test nonexistent  # Should return helpful error
+"Follow tests/running-spectacular-tests.md for the nonexistent command"  # Should return helpful error
 ```
 
 **Validation:**
@@ -215,7 +215,7 @@ ls .worktrees/test-*  # Should return "No such file or directory"
 ls .worktrees/test-*  # Should show nothing after completion
 
 # Verify exit code on failure
-/spectacular:test execute && echo "PASS" || echo "FAIL"
+# Run the workflow and check if all scenarios passed
 
 # Verify parallel execution (not sequential)
 # Check logs - subagents should start simultaneously

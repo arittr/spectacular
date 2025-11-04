@@ -18,19 +18,19 @@ This document describes how to test spectacular commands and skills using the bu
 
 ## Running Tests
 
-### The `/spectacular:test` Command
+### The Testing Workflow
 
-Use `/spectacular:test` to run automated test scenarios:
+Use the testing workflow documented in `running-spectacular-tests.md` to run automated test scenarios:
 
-```bash
+```
 # Test specific command
-/spectacular:test execute    # Run all execute command scenarios
-/spectacular:test init       # Run all init command scenarios
-/spectacular:test spec       # Run all spec command scenarios
-/spectacular:test plan       # Run all plan command scenarios
+"Follow tests/running-spectacular-tests.md for the execute command"
+"Follow tests/running-spectacular-tests.md for the init command"
+"Follow tests/running-spectacular-tests.md for the spec command"
+"Follow tests/running-spectacular-tests.md for the plan command"
 
 # Test everything
-/spectacular:test all        # Run all test scenarios across all commands
+"Run all spectacular test scenarios"
 ```
 
 ### What Happens During Testing
@@ -44,17 +44,14 @@ Use `/spectacular:test` to run automated test scenarios:
 
 The test command is currently in GREEN phase - it validates infrastructure and documents the testing architecture. Full parallel subagent dispatch is documented but awaiting Task tool integration.
 
-**How to test manually (until full automation):**
+**How to test manually:**
 
 ```bash
-# List scenarios for a command
-/spectacular:test execute
-
 # Read scenario file
 cat tests/scenarios/execute/parallel-stacking-2-tasks.md
 
 # Follow scenario's Success Criteria to verify behavior
-# Use testing-spectacular skill for structured verification
+# Or use the automated workflow: "Follow tests/running-spectacular-tests.md for the execute command"
 ```
 
 ### Example Output
@@ -459,7 +456,7 @@ Most scenarios should use existing fixtures. Add new fixtures when:
 ### When to Run Tests
 
 **Before releases:**
-- Run `/spectacular:test all` to verify nothing broke
+- Run all spectacular test scenarios to verify nothing broke
 - Test commands manually in sample projects
 - Verify version consistency with `./scripts/update-version.sh`
 
@@ -471,7 +468,7 @@ Most scenarios should use existing fixtures. Add new fixtures when:
 **When editing commands:**
 1. Read existing scenarios for that command
 2. Make changes to command file
-3. Run `/spectacular:test {command}` to verify
+3. Run the testing workflow for that command to verify
 4. Add new scenarios for edge cases you discover
 
 **When creating skills:**
@@ -672,7 +669,7 @@ Scenarios should complete in minutes, not hours. If slow:
 
 **Testing checklist:**
 
-- [ ] Run `/spectacular:test all` before releases
+- [ ] Run all spectacular test scenarios before releases
 - [ ] Add test scenarios when finding bugs (RED phase)
 - [ ] Use RED-GREEN-REFACTOR for all command/skill development
 - [ ] Test fixtures initialized and validated

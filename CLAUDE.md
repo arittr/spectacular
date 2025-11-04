@@ -114,9 +114,18 @@ This repository has **no traditional test/build commands** - it's pure markdown 
 
 **Validation approach:**
 
-- Manual testing by invoking commands in a test repository
-- Skills can be tested using the `testing-skills-with-subagents` skill from superpowers
+- **Automated testing:** Use `tests/running-spectacular-tests.md` to verify command implementations against test scenarios
+- **Manual testing:** Invoke commands in a test repository
+- **Skills testing:** Use the `testing-skills-with-subagents` skill from superpowers
 - Changes should be validated by running the actual workflow in a sample project
+
+**Running automated tests:**
+
+Ask Claude to follow the testing workflow:
+```
+"Follow tests/running-spectacular-tests.md for the execute command"
+"Run all spectacular test scenarios"
+```
 
 ### Plugin Development
 
