@@ -212,17 +212,17 @@ TASK_COUNT=${#TASK_BRANCHES[@]}
 if [ $TASK_COUNT -eq 1 ]; then
   git checkout "${TASK_BRANCHES[0]}"
   gs branch track
-  gs upstack onto "$BASE_BRANCH"  # Explicitly set base for first parallel task
+  gs upstack onto "$BASE_BRANCH"  # Explicitly set base for single parallel task
 else
   # Handle N≥2
   for i in "${!TASK_BRANCHES[@]}"; do
     BRANCH="${TASK_BRANCHES[$i]}"
 
     if [ $i -eq 0 ]; then
-      # First task: track and explicitly set base
+      # First task: only track (already at correct position from worktree creation)
       git checkout "$BRANCH"
       gs branch track
-      gs upstack onto "$BASE_BRANCH"  # Explicitly stack onto pre-parallel base
+      # NO gs upstack onto - first parallel task is base for subsequent tasks
     else
       # Subsequent: track + upstack onto previous
       PREV_BRANCH="${TASK_BRANCHES[$((i-1))]}"
@@ -259,19 +259,67 @@ git worktree list | grep "{runid}-task-"
 
 **Why after stacking:** Branches must be stacked and verified before destroying evidence.
 
-### Step 8: Code Review
+### Step 8: Code Review (Binary Quality Gate)
 
-**Use `requesting-code-review` skill:**
+**Use `requesting-code-review` skill to call code-reviewer agent, then parse results STRICTLY:**
 
-```
-Skill tool: requesting-code-review
-```
+1. **Dispatch code review:**
+   ```
+   Skill tool: requesting-code-review
+   ```
 
-Phase is complete ONLY when:
+2. **Parse output using binary algorithm:**
+
+   Read the code review output and search for "Ready to merge?" field:
+
+   - ✅ **"Ready to merge? Yes"** → APPROVED
+     - Announce: "✅ Code review APPROVED - Phase {N} complete, proceeding"
+     - Continue to next phase
+
+   - ❌ **"Ready to merge? No"** → REJECTED
+     - STOP execution
+     - Report: "❌ Code review REJECTED - critical issues found"
+     - List all Critical and Important issues from review
+     - Dispatch fix subagent or report to user
+     - Go to step 3 (re-review after fixes)
+
+   - ❌ **"Ready to merge? With fixes"** → REJECTED
+     - STOP execution
+     - Report: "❌ Code review requires fixes before proceeding"
+     - List all issues from review
+     - Dispatch fix subagent or report to user
+     - Go to step 3 (re-review after fixes)
+
+   - ❌ **No output / empty response** → FAILURE
+     - STOP execution
+     - Report: "❌ Code review returned no output - treating as FAILURE"
+     - Suggest: "Check review agent logs, may need to re-run review"
+     - DO NOT proceed
+
+   - ❌ **Soft language (e.g., "APPROVED WITH MINOR SUGGESTIONS")** → REJECTED
+     - STOP execution
+     - Report: "❌ Code review used soft language instead of binary verdict"
+     - Warn: "Binary gate requires explicit 'Ready to merge? Yes'"
+     - Go to step 3 (re-review)
+
+   - ❌ **Missing "Ready to merge?" field** → FAILURE
+     - STOP execution
+     - Report: "❌ Code review output missing 'Ready to merge?' field"
+     - Suggest: "Review agent may not be following template"
+     - Fail execution
+
+3. **Re-review loop (if REJECTED):**
+   - Fix all issues identified by review
+   - Return to step 1 (dispatch review again)
+   - Repeat until "Ready to merge? Yes"
+
+**Critical:** Only "Ready to merge? Yes" allows proceeding. Everything else stops execution.
+
+**Phase is complete ONLY when:**
 - ✅ All branches created
 - ✅ Linear stack verified
 - ✅ Worktrees cleaned up
-- ✅ Code review passes
+- ✅ Code review returns "Ready to merge? Yes"
 
 ## Rationalization Table
 
