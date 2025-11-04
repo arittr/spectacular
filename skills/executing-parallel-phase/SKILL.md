@@ -136,7 +136,29 @@ WORKTREE: .worktrees/{run-id}-task-{task-id}
 CRITICAL:
 1. Verify isolation (pwd must show task worktree)
 2. Implement task
-3. Run quality checks (exit code validation)
+3. Run quality checks with exit code validation:
+
+   npm test
+   if [ $? -ne 0 ]; then
+     echo "❌ Tests failed"
+     echo "Fix test failures before creating branch"
+     exit 1
+   fi
+
+   npm run lint
+   if [ $? -ne 0 ]; then
+     echo "❌ Lint failed"
+     exit 1
+   fi
+
+   npm run build
+   if [ $? -ne 0 ]; then
+     echo "❌ Build failed"
+     exit 1
+   fi
+
+   Do NOT create branch if quality checks fail
+
 4. Create branch: gs branch create {branch-name}
 5. Detach HEAD: git switch --detach
 6. Report completion
