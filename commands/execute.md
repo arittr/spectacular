@@ -9,6 +9,8 @@ You are executing an implementation plan.
 Before starting, you MUST read these skills:
 
 **Spectacular skills** (execution strategies):
+
+- `using-git-spice` - For managing stacked branches
 - `executing-parallel-phase` - For parallel phase orchestration with worktrees
 - `executing-sequential-phase` - For sequential phase natural stacking
 - `validating-setup-commands` - For CLAUDE.md setup validation
@@ -16,7 +18,7 @@ Before starting, you MUST read these skills:
 - `troubleshooting-execute` - For error recovery and diagnostics (reference)
 
 **Superpowers skills** (workflow support):
-- `using-git-spice` - For managing stacked branches
+
 - `using-git-worktrees` - For parallel task isolation
 - `requesting-code-review` - For phase review gates
 - `verification-before-completion` - For final verification
@@ -41,6 +43,7 @@ Where `a1b2c3` is the runId and `magic-link-auth` is the feature slug.
 The RUN_ID is the first segment of the spec directory name (before the first dash).
 
 For example:
+
 - Path: `.worktrees/3a00a7-main/specs/3a00a7-agent-standardization-refactor/plan.md`
 - Directory: `3a00a7-agent-standardization-refactor`
 - RUN_ID: `3a00a7`
@@ -63,6 +66,7 @@ fi
 **CRITICAL**: Execute this entire block as a single multi-line Bash tool call. The comment on the first line is REQUIRED - without it, command substitution `$(...)` causes parse errors.
 
 **Store RUN_ID for use in:**
+
 - Branch naming: `{run-id}-task-X-Y-name`
 - Filtering: `git branch | grep "^  {run-id}-"`
 - Cleanup: Identify which branches belong to this run
@@ -98,7 +102,7 @@ git worktree list | grep "${RUN_ID}-main"
 
 Before starting or resuming, delegate git state check to a subagent:
 
-```
+````
 ROLE: Check for existing implementation work
 
 TASK: Determine if work has already started and identify resume point
@@ -121,9 +125,10 @@ gs branch tree
 
 # Filter branches for this RUN_ID
 git branch | grep "^  {run-id}-task-"
-```
+````
 
 2. Analyze results:
+
    - Look for commits with `[Task X.Y]` pattern in git log
    - Check for task branches matching `{run-id}-task-` pattern
    - Match branch names to plan tasks
@@ -136,6 +141,7 @@ git branch | grep "^  {run-id}-task-"
    - Resume point (next incomplete task)
    - Whether working directory is clean
    - Recommendation: resume or start fresh
+
 ```
 
 **Based on subagent report:**
@@ -166,18 +172,14 @@ Read the plan file and extract:
 **Store extracted task info for subagent prompts** (saves ~1000 tokens per subagent):
 
 ```
+
 Task 4.2:
-  Name: Integrate prompts module into generator
-  Files:
-    - src/generator.ts
-    - src/types.ts
-  Acceptance Criteria:
-    - Import PromptService from prompts module
-    - Replace manual prompt construction with PromptService.getCommitPrompt()
-    - Update tests to mock PromptService
-    - All tests pass
-  Dependencies: Task 4.1 (fallback logic removed)
-```
+Name: Integrate prompts module into generator
+Files: - src/generator.ts - src/types.ts
+Acceptance Criteria: - Import PromptService from prompts module - Replace manual prompt construction with PromptService.getCommitPrompt() - Update tests to mock PromptService - All tests pass
+Dependencies: Task 4.1 (fallback logic removed)
+
+````
 
 Verify plan structure:
 - ✅ Has phases with clear strategies
@@ -291,9 +293,10 @@ fi
 
 # Verify all detected checks passed
 echo "✅ All quality checks passed - ready to complete"
-```
+````
 
 **If no commands detected:**
+
 ```
 ⚠️  No test/lint/build commands found in project.
 Add to CLAUDE.md or constitution/testing.md for automated quality gates.
@@ -307,6 +310,7 @@ Proceeding without verification - manual review recommended.
 After verification passes:
 
 Use the `finishing-a-development-branch` skill to:
+
 1. Review all changes
 2. Choose next action:
    - Submit stack as PRs: `gs stack submit` (per using-git-spice skill)
@@ -315,7 +319,7 @@ Use the `finishing-a-development-branch` skill to:
 
 ### Step 5: Final Report
 
-```markdown
+````markdown
 ✅ Feature Implementation Complete
 
 **RUN_ID**: {run-id}
@@ -326,6 +330,7 @@ Use the `finishing-a-development-branch` skill to:
 ## Execution Summary
 
 **Phases Completed**: {count}
+
 - Sequential: {count} phases
 - Parallel: {count} phases
 
@@ -338,6 +343,7 @@ Use the `finishing-a-development-branch` skill to:
 
 {For each parallel phase:}
 **Phase {id}**: {task-count} tasks in parallel
+
 - Estimated sequential time: {hours}h
 - Actual parallel time: {hours}h
 - Time saved: {hours}h
@@ -359,6 +365,7 @@ If no commands detected, quality gates are skipped with warning to user.
 ## Next Steps
 
 ### Review Changes (from main repo)
+
 ```bash
 # All these commands work from main repo root
 gs log short                      # View all branches and commits in stack
@@ -370,14 +377,17 @@ cd .worktrees/{run-id}-main
 git diff main..HEAD               # See all changes in current stack
 cd ../..                          # Return to main repo
 ```
+````
 
 ### Submit for Review (from main repo)
+
 ```bash
 # git-spice commands work from main repo
 gs stack submit  # Submits entire stack as PRs (per using-git-spice skill)
 ```
 
 ### Or Continue with Dependent Feature (from worktree)
+
 ```bash
 cd .worktrees/{run-id}-main       # Navigate to worktree
 gs branch create  # Creates new branch stacked on current
@@ -385,6 +395,7 @@ cd ../..                          # Return to main repo when done
 ```
 
 ### Cleanup Worktree (after PRs merged)
+
 ```bash
 # From main repo root:
 git worktree remove .worktrees/{run-id}-main
@@ -394,6 +405,7 @@ git branch -d {run-id}-main
 ```
 
 **Important**: Main repo remains unchanged. All work is in the worktree and task branches.
+
 ```
 
 ## Error Handling
@@ -427,3 +439,4 @@ Consult this skill when execution fails or produces unexpected results.
 - **Continuous commits** - Small, focused commits with [Task X.Y] markers throughout
 
 Now execute the plan from: {plan-path}
+```
