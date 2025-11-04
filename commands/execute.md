@@ -4,25 +4,25 @@ description: Execute implementation plan with automatic sequential/parallel orch
 
 You are executing an implementation plan.
 
-## Required Skills
+## Available Skills
 
-Before starting, you MUST read these skills:
+**Skills are referenced on-demand when you encounter the relevant step. Do not pre-read all skills upfront.**
 
-**Spectacular skills** (execution strategies):
+**Phase Execution** (read when you encounter the phase type):
 
-- `using-git-spice` - For managing stacked branches
-- `executing-parallel-phase` - For parallel phase orchestration with worktrees
-- `executing-sequential-phase` - For sequential phase natural stacking
-- `validating-setup-commands` - For CLAUDE.md setup validation
-- `understanding-cross-phase-stacking` - For how phases chain together
-- `troubleshooting-execute` - For error recovery and diagnostics (reference)
+- `executing-parallel-phase` - Mandatory workflow for parallel phases (Step 2)
+- `executing-sequential-phase` - Mandatory workflow for sequential phases (Step 2)
 
-**Superpowers skills** (workflow support):
+**Support Skills** (read as needed when referenced):
 
-- `using-git-worktrees` - For parallel task isolation
-- `requesting-code-review` - For phase review gates
-- `verification-before-completion` - For final verification
-- `finishing-a-development-branch` - For completion workflow
+- `understanding-cross-phase-stacking` - Reference before starting any phase (explains base branch inheritance)
+- `validating-setup-commands` - Reference if CLAUDE.md setup validation needed (Step 1.5)
+- `using-git-spice` - Reference for git-spice command syntax (as needed)
+- `requesting-code-review` - Reference after each phase completes (Step 2)
+- `verification-before-completion` - Reference before claiming completion (Step 3)
+- `finishing-a-development-branch` - Reference after all phases complete (Step 4)
+- `troubleshooting-execute` - Reference if execution fails (error recovery)
+- `using-git-worktrees` - Reference if worktree issues occur (diagnostics)
 
 ## Input
 
@@ -100,61 +100,41 @@ git worktree list | grep "${RUN_ID}-main"
 
 ### Step 0c: Check for Existing Work
 
-Before starting or resuming, delegate git state check to a subagent:
+**Check if implementation work already exists:**
 
-````
-ROLE: Check for existing implementation work
-
-TASK: Determine if work has already started and identify resume point
-
-IMPLEMENTATION:
-
-1. Check current state in the main worktree:
 ```bash
 # Get repo root
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
-# Check state in main worktree using git -C
-git -C "$REPO_ROOT/.worktrees/{run-id}-main" branch --show-current
-git -C "$REPO_ROOT/.worktrees/{run-id}-main" log --oneline --grep="\[Task" -20
-git -C "$REPO_ROOT/.worktrees/{run-id}-main" status
+# Check current branch in main worktree
+CURRENT_BRANCH=$(git -C "$REPO_ROOT/.worktrees/${RUN_ID}-main" branch --show-current 2>/dev/null || echo "")
 
-# Check git-spice stack (from main repo)
-gs ls
-gs branch tree
+# Count existing task branches for this RUN_ID
+EXISTING_TASKS=$(git branch 2>/dev/null | grep -c "^  ${RUN_ID}-task-" || echo "0")
 
-# Filter branches for this RUN_ID
-git branch | grep "^  {run-id}-task-"
-````
-
-2. Analyze results:
-
-   - Look for commits with `[Task X.Y]` pattern in git log
-   - Check for task branches matching `{run-id}-task-` pattern
-   - Match branch names to plan tasks
-   - Determine which phase and task to resume from
-
-3. Report:
-   - Current branch name in main worktree
-   - List of completed tasks (from commit messages)
-   - List of existing task branches
-   - Resume point (next incomplete task)
-   - Whether working directory is clean
-   - Recommendation: resume or start fresh
-
+# Report status
+if [ "$EXISTING_TASKS" -gt 0 ]; then
+  echo "📋 Found $EXISTING_TASKS existing task branch(es) for RUN_ID: $RUN_ID"
+  echo "   Current branch: $CURRENT_BRANCH"
+  echo ""
+  echo "Resuming from current state. The execution will:"
+  echo "- Sequential phases: Continue from current branch"
+  echo "- Parallel phases: Skip completed tasks, run remaining"
+  echo ""
+else
+  echo "✅ No existing work found - starting fresh execution"
+  echo ""
+fi
 ```
 
-**Based on subagent report:**
+**CRITICAL**: Execute this entire block as a single multi-line Bash tool call. The comment on the first line is REQUIRED - without it, command substitution `$(...)` causes parse errors.
 
-**If work already exists:**
-- Orchestrator uses the resume point to skip to Step 2 at the appropriate task
-- Sequential phases: Resume from next incomplete task in current phase
-- Parallel phases: Resume incomplete tasks only
+**Resume behavior:**
+- If `EXISTING_TASKS > 0`: Execution continues from current state in main worktree
+- If `EXISTING_TASKS = 0`: Execution starts from Phase 1, Task 1
+- Main worktree current branch indicates progress (latest completed work)
 
-**If no existing work:**
-- Continue to Step 1 (Read and Parse Plan)
-
-**Note:** All git operations check state in `{runId}-main` worktree using `git -C` or absolute paths.
+**Note:** Orchestrator proceeds immediately to Step 1. Phase execution logic in Step 2 handles resume by checking current branch and existing task branches.
 
 ### Step 1: Read and Parse Plan
 
@@ -221,13 +201,57 @@ If you want to provide hints, check for common patterns:
 
 **IMPORTANT: Do NOT read constitution files here. Let subagents read them as needed to reduce orchestrator token usage.**
 
+### Step 1.7: Configure Code Review Frequency
+
+**Determine when to run code reviews:**
+
+```bash
+# Check if REVIEW_FREQUENCY env var is set
+REVIEW_FREQUENCY=${REVIEW_FREQUENCY:-}
+```
+
+**If not set, prompt user for preference:**
+
+If `REVIEW_FREQUENCY` is empty, use AskUserQuestion tool to prompt:
+
+```
+Question: "How frequently should code reviews run during execution?"
+Header: "Review Frequency"
+Options:
+  1. "After each phase"
+     Description: "Run code review after every phase completes (safest - catches errors early, prevents compounding issues)"
+  2. "Optimize automatically"
+     Description: "Let Claude decide when to review based on phase risk/complexity (RECOMMENDED - balances speed and quality)"
+  3. "Only at end"
+     Description: "Skip per-phase reviews, run one review after all phases complete (faster, but errors may compound)"
+  4. "Skip reviews"
+     Description: "No automated code reviews (fastest, but requires manual review before merging)"
+```
+
+**Store user choice:**
+- Option 1 → `REVIEW_FREQUENCY="per-phase"`
+- Option 2 → `REVIEW_FREQUENCY="optimize"`
+- Option 3 → `REVIEW_FREQUENCY="end-only"`
+- Option 4 → `REVIEW_FREQUENCY="skip"`
+
+**Announce decision:**
+```
+Code review frequency: {REVIEW_FREQUENCY}
+```
+
+**Note:** This setting applies to all phases in this execution. Phase skills check `REVIEW_FREQUENCY` to determine whether to run code review step.
+
 ### Step 2: Execute Phases
 
 **If resuming:** Start from the incomplete phase/task identified in Step 0.
 
 For each phase in the plan, execute based on strategy:
 
-**IMPORTANT:** After each phase completes, MUST run code review using `requesting-code-review` skill before proceeding to next phase.
+**Code Review Gates:** Phase execution skills check `REVIEW_FREQUENCY` (set in Step 1.7) to determine when to run code reviews:
+- `per-phase`: Review after each phase before proceeding
+- `optimize`: LLM decides whether to review based on phase risk/complexity
+- `end-only`: Skip per-phase reviews, review once after all phases
+- `skip`: No automated reviews (manual review required)
 
 #### Cross-Phase Stacking
 
