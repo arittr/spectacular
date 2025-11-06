@@ -57,9 +57,25 @@ Use this skill when:
    # Fix the issue in the working directory
 
    # Run quality checks
+   bash <<'EOF'
    npm test
+   if [ $? -ne 0 ]; then
+     echo "❌ Tests failed"
+     exit 1
+   fi
+
    npm run lint
+   if [ $? -ne 0 ]; then
+     echo "❌ Lint failed"
+     exit 1
+   fi
+
    npm run build
+   if [ $? -ne 0 ]; then
+     echo "❌ Build failed"
+     exit 1
+   fi
+   EOF
 
    # Create branch if task completed but branch wasn't created
    gs branch create {runid}-task-{phase}-{task}-{name} -m "[Task {phase}.{task}] {description}"
@@ -102,9 +118,25 @@ cd .worktrees/{runid}-task-{phase}-{task}
 # Edit files, fix code
 
 # Run quality checks
+bash <<'EOF'
 npm test
+if [ $? -ne 0 ]; then
+  echo "❌ Tests failed"
+  exit 1
+fi
+
 npm run lint
+if [ $? -ne 0 ]; then
+  echo "❌ Lint failed"
+  exit 1
+fi
+
 npm run build
+if [ $? -ne 0 ]; then
+  echo "❌ Build failed"
+  exit 1
+fi
+EOF
 
 # Commit fix on existing branch
 git add --all

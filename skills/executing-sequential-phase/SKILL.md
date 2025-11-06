@@ -109,9 +109,32 @@ INSTRUCTIONS:
 4. Implement task following spec + constitution
 
 5. Run quality checks with exit code validation:
-   npm test; if [ $? -ne 0 ]; then exit 1; fi
-   npm run lint; if [ $? -ne 0 ]; then exit 1; fi
-   npm run build; if [ $? -ne 0 ]; then exit 1; fi
+
+   **CRITICAL**: Use heredoc to prevent bash parsing errors:
+
+   ```bash
+   bash <<'EOF'
+   npm test
+   if [ $? -ne 0 ]; then
+     echo "❌ Tests failed"
+     exit 1
+   fi
+
+   npm run lint
+   if [ $? -ne 0 ]; then
+     echo "❌ Lint failed"
+     exit 1
+   fi
+
+   npm run build
+   if [ $? -ne 0 ]; then
+     echo "❌ Build failed"
+     exit 1
+   fi
+   EOF
+   ```
+
+   **Why heredoc**: Prevents parsing errors when commands are wrapped by orchestrator.
 
 6. Create stacked branch (CRITICAL - Stage THEN create):
    a) git add .
