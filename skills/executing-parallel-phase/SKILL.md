@@ -61,39 +61,40 @@ PARALLEL PHASE = WORKTREES + SUBAGENTS
 ```bash
 # Get main repo root
 REPO_ROOT=$(git rev-parse --show-toplevel)
+CURRENT=$(pwd)
 
-# Check 1: Verify current location
-echo "Current location: $(pwd)"
-echo "Repo root: $REPO_ROOT"
-
-# Check 2: Verify main repo is repo root (not in a worktree)
-if [[ "$REPO_ROOT" =~ \.worktrees ]]; then
-  echo "❌ Error: Currently in worktree, must run from main repo"
-  echo "Current: $REPO_ROOT"
+# Check 1: Verify orchestrator is in main repo root
+if [ "$CURRENT" != "$REPO_ROOT" ]; then
+  echo "❌ Error: Orchestrator must run from main repo root"
+  echo "Current: $CURRENT"
+  echo "Expected: $REPO_ROOT"
+  echo ""
+  echo "Return to main repo: cd $REPO_ROOT"
   exit 1
 fi
 
-# Check 3: Verify main worktree exists
-if [ ! -d "$REPO_ROOT/.worktrees/{runid}-main" ]; then
+echo "✅ Orchestrator location verified: Main repo root"
+
+# Check 2: Verify main worktree exists
+if [ ! -d .worktrees/{runid}-main ]; then
   echo "❌ Error: Main worktree not found at .worktrees/{runid}-main"
   echo "Run /spectacular:spec first to create the workspace."
   exit 1
 fi
 
-# Check 4: Verify main branch exists
+# Check 3: Verify main branch exists
 if ! git rev-parse --verify {runid}-main >/dev/null 2>&1; then
   echo "❌ Error: Branch {runid}-main does not exist"
   echo "Spec must be created before executing parallel phase."
   exit 1
 fi
 
-# Navigate to verified location
-cd "$REPO_ROOT"
 echo "✅ Pre-conditions verified - safe to create task worktrees"
 ```
 
 **Why mandatory:**
 - Prevents nested worktrees from wrong location (9f92a8 regression)
+- Catches upstream drift (execute.md or other skill left orchestrator in wrong place)
 - Catches missing prerequisites before wasting time on worktree creation
 - Provides clear error messages for common setup issues
 
@@ -257,9 +258,11 @@ echo "✅ All {task-count} tasks completed successfully"
 
 ### Step 6: Stack Branches Linearly (BEFORE Cleanup)
 
-**Use loop-based algorithm for any N:**
+**Use loop-based algorithm for any N (orchestrator stays in main repo):**
 
 ```bash
+# Stack branches in main worktree using heredoc (orchestrator doesn't cd)
+bash <<'EOF'
 cd .worktrees/{runid}-main
 
 TASK_BRANCHES=( {array-of-branch-names} )
@@ -292,9 +295,10 @@ fi
 
 # Verify stack
 gs log short
-
-cd "$REPO_ROOT"
+EOF
 ```
+
+**Why heredoc:** Orchestrator stays in main repo. Heredoc creates subshell that navigates to worktree and exits.
 
 **Why before cleanup:** Need worktrees accessible for debugging if stacking fails.
 
