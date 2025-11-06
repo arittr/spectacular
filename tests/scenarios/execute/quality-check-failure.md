@@ -49,37 +49,34 @@ Testing `/spectacular:execute` quality check integration when tests, linting, or
 
 **Quality check execution order:**
 
-1. **Test check:**
-   ```bash
-   npm test
-   if [ $? -ne 0 ]; then
-     echo "❌ Tests failed"
-     echo "Fix test failures before creating branch"
-     exit 1
-   fi
-   ```
+All checks wrapped in heredoc for safe parsing:
 
-2. **Lint check:**
-   ```bash
-   npm run lint
-   if [ $? -ne 0 ]; then
-     echo "❌ Lint failed"
-     echo "Run 'npm run lint --fix' to auto-fix, or fix manually"
-     exit 1
-   fi
-   ```
+```bash
+bash <<'EOF'
+# 1. Test check
+npm test
+if [ $? -ne 0 ]; then
+  echo "❌ Tests failed"
+  exit 1
+fi
 
-3. **Build check:**
-   ```bash
-   npm run build
-   if [ $? -ne 0 ]; then
-     echo "❌ Build failed"
-     echo "Fix TypeScript/compilation errors before creating branch"
-     exit 1
-   fi
-   ```
+# 2. Lint check
+npm run lint
+if [ $? -ne 0 ]; then
+  echo "❌ Lint failed"
+  exit 1
+fi
 
-4. **If all pass, proceed to branch creation**
+# 3. Build check
+npm run build
+if [ $? -ne 0 ]; then
+  echo "❌ Build failed"
+  exit 1
+fi
+EOF
+```
+
+**If all pass, proceed to branch creation**
 
 ### Test Failure Scenario
 
