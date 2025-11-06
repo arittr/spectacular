@@ -49,29 +49,37 @@ For example:
 - RUN_ID: `3a00a7`
 
 ```bash
-# Extract RUN_ID from plan path (replace {the-plan-path-user-provided} with actual path)
+# Extract RUN_ID and FEATURE_SLUG from plan path (replace {the-plan-path-user-provided} with actual path)
 PLAN_PATH="{the-plan-path-user-provided}"
 DIR_NAME=$(echo "$PLAN_PATH" | sed 's|^.*specs/||; s|/plan.md$||')
 RUN_ID=$(echo "$DIR_NAME" | cut -d'-' -f1)
+FEATURE_SLUG=$(echo "$DIR_NAME" | cut -d'-' -f2-)
 
 echo "Extracted RUN_ID: $RUN_ID"
+echo "Extracted FEATURE_SLUG: $FEATURE_SLUG"
 
-# Verify RUN_ID is not empty
+# Verify RUN_ID and FEATURE_SLUG are not empty
 if [ -z "$RUN_ID" ]; then
   echo "❌ Error: Could not extract RUN_ID from plan path: $PLAN_PATH"
+  exit 1
+fi
+
+if [ -z "$FEATURE_SLUG" ]; then
+  echo "❌ Error: Could not extract FEATURE_SLUG from plan path: $PLAN_PATH"
   exit 1
 fi
 ```
 
 **CRITICAL**: Execute this entire block as a single multi-line Bash tool call. The comment on the first line is REQUIRED - without it, command substitution `$(...)` causes parse errors.
 
-**Store RUN_ID for use in:**
+**Store RUN_ID and FEATURE_SLUG for use in:**
 
 - Branch naming: `{run-id}-task-X-Y-name`
 - Filtering: `git branch | grep "^  {run-id}-"`
-- Cleanup: Identify which branches belong to this run
+- Spec path: `specs/{run-id}-{feature-slug}/spec.md`
+- Cleanup: Identify which branches/specs belong to this run
 
-**Announce:** "Executing with RUN_ID: {run-id}"
+**Announce:** "Executing with RUN_ID: {run-id}, FEATURE_SLUG: {feature-slug}"
 
 ### Step 0b: Verify Worktree Exists
 
@@ -276,6 +284,8 @@ This skill provides the complete workflow for executing sequential phases. Key c
 
 The skill includes detailed subagent prompts, quality check sequences, and code review integration.
 
+**CRITICAL**: When dispatching subagents, substitute `{run-id}` and `{feature-slug}` with the values extracted in Step 0a. Subagents need these to read the spec at `specs/{run-id}-{feature-slug}/spec.md`.
+
 #### Parallel Phase Strategy
 
 **Use the `executing-parallel-phase` skill:**
@@ -289,6 +299,8 @@ This skill provides the complete mandatory workflow for executing parallel phase
 - Code review after stacking
 
 The skill includes the 8-step mandatory sequence, verification checks, N=1 edge case handling, and stacking algorithm.
+
+**CRITICAL**: When dispatching subagents, substitute `{run-id}` and `{feature-slug}` with the values extracted in Step 0a. Subagents need these to read the spec at `specs/{run-id}-{feature-slug}/spec.md`.
 
 ### Step 3: Verify Completion
 
