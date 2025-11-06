@@ -56,20 +56,48 @@ SEQUENTIAL PHASE = MAIN WORKTREE + NATURAL STACKING
 
 **Announce:** "I'm using executing-sequential-phase to execute {N} tasks sequentially in Phase {phase-id}."
 
-### Step 1: Verify Setup in Main Worktree
+### Step 0: Verify Orchestrator Location
 
-**Work in the existing `{runid}-main` worktree:**
+**MANDATORY: Verify orchestrator is in main repo root before any operations:**
 
 ```bash
-cd .worktrees/{runid}-main
+REPO_ROOT=$(git rev-parse --show-toplevel)
+CURRENT=$(pwd)
 
-# Check dependencies installed
-if [ ! -d node_modules ]; then
-  # Run setup from CLAUDE.md
+if [ "$CURRENT" != "$REPO_ROOT" ]; then
+  echo "❌ Error: Orchestrator must run from main repo root"
+  echo "Current: $CURRENT"
+  echo "Expected: $REPO_ROOT"
+  echo ""
+  echo "Return to main repo: cd $REPO_ROOT"
+  exit 1
+fi
+
+echo "✅ Orchestrator location verified: Main repo root"
+```
+
+**Why critical:**
+- Orchestrator delegates work but never changes directory
+- All operations use `git -C .worktrees/path` or `bash -c "cd path && cmd"`
+- This assertion catches upstream drift immediately
+
+### Step 1: Verify Setup in Main Worktree
+
+**Check and install dependencies from main repo (orchestrator never cd's):**
+
+```bash
+# Check if dependencies installed in main worktree
+if [ ! -d .worktrees/{runid}-main/node_modules ]; then
+  echo "Installing dependencies in main worktree..."
+  bash <<'EOF'
+  cd .worktrees/{runid}-main
   {install-command}
   {postinstall-command}
+  EOF
 fi
 ```
+
+**Why heredoc:** Orchestrator stays in main repo. Heredoc creates subshell that exits after commands.
 
 **Why main worktree:** Sequential tasks were created during spec generation. All sequential phases share this worktree.
 
@@ -158,13 +186,12 @@ CRITICAL:
 
 ### Step 3: Verify Natural Stack Formation
 
-**After all tasks complete:**
+**After all tasks complete (verify from main repo):**
 
 ```bash
-cd .worktrees/{runid}-main
-gs log short
+# Verify stack using bash subshell (orchestrator stays in main repo)
+bash -c "cd .worktrees/{runid}-main && gs log short"
 # Should show: task-1 → task-2 → task-3 (linear chain)
-cd "$REPO_ROOT"
 ```
 
 **Each `gs branch create` automatically stacked on the previous task's branch.**
