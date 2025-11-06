@@ -114,14 +114,26 @@ Excellent! Code review complete with APPROVED WITH MINOR SUGGESTIONS. The implem
 [No output returned]
 ```
 
-**Orchestrator action:**
-- ❌ Detect missing output
+**Orchestrator action (first attempt):**
+- ⚠️ Detect missing output
+- ⚠️ Warn: "Code review returned no output - retrying once"
+- 🔄 Dispatch `requesting-code-review` again (transient issue)
+- ⏳ Wait for retry result
+
+**If retry succeeds:**
+- ✅ Parse retry output normally (Yes/No/With fixes)
+- ✅ Announce: "Code review APPROVED (retry succeeded)" if Yes
+
+**If retry ALSO has no output:**
 - ❌ STOP execution immediately
-- ❌ Report: "Code review returned no output - treating as FAILURE"
-- ❌ Suggest: "Check review agent logs, may need to re-run review"
+- ❌ Report: "Code review failed twice with no output"
+- ❌ Display both attempt results for debugging
+- ❌ Suggest: "Check review agent logs, may need manual review"
 - ❌ DO NOT proceed
 
-**Why critical:** No output = unknown state. Never assume success.
+**Why critical:** No output = unknown state. Retry once for transient issues, then fail.
+
+**See also:** `code-review-malformed-retry.md` for detailed retry behavior.
 
 ### Failure Case 5: Malformed Output
 
@@ -130,22 +142,39 @@ Excellent! Code review complete with APPROVED WITH MINOR SUGGESTIONS. The implem
 The code looks good overall. Some minor tweaks needed but nothing blocking.
 ```
 
-**Orchestrator action:**
-- ❌ Search for "Ready to merge?" field - NOT FOUND
-- ❌ STOP execution
-- ❌ Warn: "Code review output missing 'Ready to merge?' field"
-- ❌ Suggest: "Review agent may not be following template"
+**Orchestrator action (first attempt):**
+- ⚠️ Search for "Ready to merge?" field - NOT FOUND
+- ⚠️ Warn: "Code review output missing 'Ready to merge?' field - retrying once"
+- 🔄 Dispatch `requesting-code-review` again (may be transient issue)
+- ⏳ Wait for retry result
+
+**If retry succeeds:**
+- ✅ Parse retry output normally (Yes/No/With fixes)
+- ✅ Announce: "Code review APPROVED (retry succeeded)" if Yes
+
+**If retry ALSO missing field:**
+- ❌ STOP execution immediately
+- ❌ Report: "Code review failed twice with malformed output"
+- ❌ Display excerpts from both attempts for debugging
+- ❌ Suggest: "Review agent may not be following template - check code-reviewer skill"
+- ❌ DO NOT hallucinate issues from malformed text
+- ❌ DO NOT dispatch fix subagents
 - ❌ Fail execution
+
+**See also:** `code-review-malformed-retry.md` for detailed retry behavior and anti-hallucination rules.
 
 ## Parsing Algorithm
 
 **Orchestrator must follow this strict algorithm:**
 
 ```python
-def parse_review_result(output: str) -> Decision:
+def parse_review_result(output: str, is_retry: bool = False) -> Decision:
     # Check for no output
     if not output or output.strip() == "":
-        return REJECTED("No output returned from review")
+        if is_retry:
+            return REJECTED("Both attempts returned no output")
+        else:
+            return RETRY("No output - retrying once")
 
     # Search for "Ready to merge?" field
     if "Ready to merge? Yes" in output:
@@ -157,15 +186,31 @@ def parse_review_result(output: str) -> Decision:
     if "Ready to merge? With fixes" in output:
         return REJECTED("Review requires fixes before proceeding")
 
-    # Soft language detection
+    # Soft language detection (immediate rejection, no retry)
     if "APPROVED" in output and "Ready to merge? Yes" not in output:
         return REJECTED("Soft language detected - binary gate requires explicit 'Yes'")
 
-    # Missing field
-    return REJECTED("Review output missing 'Ready to merge?' field")
+    # Missing field - retry once for transient issues
+    if not is_retry:
+        return RETRY("Missing 'Ready to merge?' field - retrying")
+    else:
+        return REJECTED("Both attempts produced malformed output")
+
+# Main review flow
+attempt_1 = parse_review_result(review_output_1, is_retry=False)
+
+if attempt_1 == RETRY:
+    # Dispatch code-reviewer again
+    review_output_2 = dispatch_code_review()
+    attempt_2 = parse_review_result(review_output_2, is_retry=True)
+    return attempt_2
+else:
+    return attempt_1
 ```
 
-**Only APPROVED() allows proceeding. Everything else stops execution.**
+**Only APPROVED() allows proceeding. RETRY triggers one retry attempt. Everything else stops execution.**
+
+**Note:** See `code-review-malformed-retry.md` for comprehensive retry behavior specification.
 
 ## Anti-Patterns to Detect
 
