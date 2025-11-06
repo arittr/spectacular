@@ -118,6 +118,51 @@ CRITICAL:
 - ✅ Spec reading in isolated worktree (not main repo)
 - ✅ Spec provides shared context across parallel tasks
 
+### Fix Subagent Dispatch (Both Sequential and Parallel)
+
+**When orchestrator dispatches fix subagent after code review rejection:**
+
+```markdown
+Task(Fix Phase {N} code review issues)
+Prompt: Fix the following issues found in Phase {N} code review:
+
+{List all issues from review output with severity and file locations}
+
+CONTEXT FOR FIXES:
+
+1. Read constitution (if exists):
+   docs/constitutions/current/
+
+2. Read feature specification:
+   specs/{run-id}-{feature-slug}/spec.md
+
+   The spec provides architectural context for fixes:
+   - WHY decisions were made (rationale for current implementation)
+   - HOW features should integrate (system boundaries)
+   - WHAT requirements must be met (acceptance criteria)
+
+3. Apply fixes following spec + constitution patterns
+
+CRITICAL: Work in .worktrees/{runid}-main
+CRITICAL: Amend existing branch or add new commit
+CRITICAL: Run all quality checks before completion
+CRITICAL: Verify all issues resolved before reporting completion
+```
+
+**Critical elements:**
+- ✅ Step 1 explicitly instructs reading constitution
+- ✅ Step 2 explicitly instructs reading spec
+- ✅ Spec path uses run-id and feature-slug from plan
+- ✅ Explains WHY spec is needed for fixes (architectural context)
+- ✅ Spec reading happens BEFORE applying fixes (step 3)
+- ✅ Same anchoring pattern as regular task subagents
+
+**Why fix subagents need spec anchoring:**
+- Fix subagents modify existing code, need same architectural context as original implementation
+- Without spec: Fixes may violate architectural decisions or integration requirements
+- Without constitution: Fixes may use patterns inconsistent with codebase standards
+- Real example: Review says "missing validation" → Without spec, subagent adds generic validation → Spec actually requires multi-tenant validation with specific business rules
+
 ## Anti-Patterns to Detect
 
 ### Anti-Pattern 1: Missing Spec Instruction
@@ -235,6 +280,49 @@ Without spec:
 Spec contains these requirements.
 ```
 
+### Anti-Pattern 6: Fix Subagents Without Spec Anchoring
+
+**WRONG:**
+```markdown
+Task(Fix Phase {N} code review issues)
+Prompt: Fix the following issues found in Phase {N} code review:
+
+{List all issues}
+
+CRITICAL: Work in .worktrees/{runid}-main
+CRITICAL: Amend existing branch
+CRITICAL: Run quality checks
+```
+
+**Why wrong:**
+- Fix subagents modify existing code without architectural context
+- No understanding of WHY original decisions were made
+- No understanding of HOW features should integrate
+- Fixes may introduce new architectural drift
+
+**Example drift:**
+
+```
+Code review says: "Missing validation on accessCode field"
+
+Without spec, fix subagent adds:
+- Basic string validation (min 6 chars, alphanumeric)
+
+Spec actually requires:
+- Case-insensitive validation
+- Prevent SQL injection patterns
+- Allow hyphens for readability
+- Must match format from game creation flow
+
+Result: Fix passes code review but breaks integration
+```
+
+**Real-world impact:**
+- Fix loop creates new issues while fixing old ones
+- Multiple review iterations required
+- Architectural drift accumulates
+- "Whack-a-mole" debugging pattern
+
 ## Success Criteria
 
 ### Sequential Phase Skill
@@ -251,10 +339,20 @@ Spec contains these requirements.
 - [ ] Spec reading happens after constitution step
 - [ ] Explains what spec provides (requirements, architecture, rationale)
 
-### Both Skills
+### Fix Subagents (Both Sequential and Parallel)
+- [ ] `executing-sequential-phase/SKILL.md` includes spec reading in fix subagent prompt
+- [ ] `executing-parallel-phase/SKILL.md` includes spec reading in fix subagent prompt
+- [ ] Spec path format: `specs/{run-id}-{feature-slug}/spec.md`
+- [ ] Constitution reading included: `docs/constitutions/current/`
+- [ ] Spec reading happens before applying fixes
+- [ ] Explains what spec provides for fixing context
+- [ ] Same anchoring pattern as regular task subagents
+
+### All Subagent Types
 - [ ] Spec reading is MANDATORY (not optional or conditional)
 - [ ] Clear explanation of spec vs constitution vs plan context
 - [ ] No vague "read project docs" language
+- [ ] Consistent pattern across all subagent types (task + fix)
 
 ## Implementation Verification
 
@@ -279,15 +377,46 @@ Should contain subagent prompt with:
 
 Should contain identical spec reading instruction in subagent prompt.
 
+**Check:** `skills/executing-sequential-phase/SKILL.md` at "Step 4: Code Review" (fix subagent)
+
+Should contain fix subagent prompt with:
+```markdown
+CONTEXT FOR FIXES:
+
+1. Read constitution (if exists): docs/constitutions/current/
+
+2. Read feature specification: specs/{run-id}-{feature-slug}/spec.md
+
+   The spec provides architectural context for fixes:
+   - WHY decisions were made (rationale for current implementation)
+   - HOW features should integrate (system boundaries)
+   - WHAT requirements must be met (acceptance criteria)
+
+3. Apply fixes following spec + constitution patterns
+```
+
+**Check:** `skills/executing-parallel-phase/SKILL.md` at "Step 8: Code Review" (fix subagent)
+
+Should contain identical fix subagent prompt with spec anchoring.
+
 ## Testing Method
 
-**Verification approach:**
+**Verification approach for regular task subagents:**
 
 1. Read `executing-sequential-phase/SKILL.md` subagent dispatch section
 2. Search for "spec" or "specification" in subagent prompt
 3. Verify explicit instruction to read `specs/{run-id}-{feature-slug}/spec.md`
 4. Verify instruction comes before implementation step
 5. Repeat for `executing-parallel-phase/SKILL.md`
+
+**Verification approach for fix subagents:**
+
+1. Read `executing-sequential-phase/SKILL.md` code review section
+2. Search for "Task(Fix Phase" in fix subagent prompt
+3. Verify "CONTEXT FOR FIXES" section exists
+4. Verify explicit instruction to read constitution and spec
+5. Verify spec reading comes before "Apply fixes" step
+6. Repeat for `executing-parallel-phase/SKILL.md`
 
 **Evidence of PASS:**
 - Both skills contain explicit spec reading instruction

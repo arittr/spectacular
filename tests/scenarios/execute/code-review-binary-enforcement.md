@@ -52,8 +52,9 @@ Testing that code review acts as a **hard binary quality gate** after phase comp
 **Orchestrator action:**
 - ❌ Parse "Ready to merge? No"
 - ❌ STOP execution
-- ❌ Report issues to user or dispatch fix subagent
-- ❌ Re-review after fixes
+- ❌ List all Critical and Important issues from review
+- ❌ Dispatch fix subagent to address all identified issues (autonomous - NO user prompt)
+- ❌ Re-review after fixes complete
 - ❌ Only proceed when review returns "Yes"
 
 ### Failure Case 2: Review Requires Fixes
@@ -75,8 +76,9 @@ Testing that code review acts as a **hard binary quality gate** after phase comp
 **Orchestrator action:**
 - ❌ Parse "Ready to merge? With fixes"
 - ❌ STOP execution (treat as REJECTED)
-- ❌ Report issues and dispatch fix subagent
-- ❌ Re-review after fixes
+- ❌ List all issues from review
+- ❌ Dispatch fix subagent to address all identified issues (autonomous - NO user prompt)
+- ❌ Re-review after fixes complete
 - ❌ Only proceed when review returns "Yes"
 
 ### Failure Case 3: Soft Language (Anti-Pattern)
