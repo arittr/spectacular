@@ -258,6 +258,12 @@ Use `requesting-code-review` skill to call code-reviewer agent, then parse resul
 1. **Dispatch code review:**
    ```
    Skill tool: requesting-code-review
+
+   Context provided to reviewer:
+   - WORKTREE: .worktrees/{runid}-main
+   - PHASE: {phase-number}
+   - TASKS: {task-list}
+   - BASE_BRANCH: {base-branch-name}
    ```
 
 2. **Parse output using binary algorithm:**
@@ -272,15 +278,17 @@ Use `requesting-code-review` skill to call code-reviewer agent, then parse resul
      - STOP execution
      - Report: "❌ Code review REJECTED - critical issues found"
      - List all Critical and Important issues from review
-     - Dispatch fix subagent or report to user
-     - Go to step 3 (re-review after fixes)
+     - Dispatch fix subagent to address all identified issues
+     - DO NOT ask user what to do - autonomous fixing is expected
+     - Go to step 5 (re-review after fixes)
 
    - ❌ **"Ready to merge? With fixes"** → REJECTED
      - STOP execution
      - Report: "❌ Code review requires fixes before proceeding"
      - List all issues from review
-     - Dispatch fix subagent or report to user
-     - Go to step 3 (re-review after fixes)
+     - Dispatch fix subagent to address all identified issues
+     - DO NOT ask user what to do - autonomous fixing is expected
+     - Go to step 5 (re-review after fixes)
 
    - ⚠️ **No output / empty response** → RETRY ONCE
      - Warn: "⚠️ Code review returned no output - retrying once"
@@ -321,9 +329,69 @@ Use `requesting-code-review` skill to call code-reviewer agent, then parse resul
    - Fail execution
 
 5. **Re-review loop (if REJECTED with valid verdict):**
-   - Fix all issues identified by review
-   - Return to step 1 (dispatch review again)
-   - Repeat until "Ready to merge? Yes"
+
+   **Initialize iteration tracking:**
+   ```bash
+   REJECTION_COUNT=0
+   ```
+
+   **On each rejection:**
+   ```bash
+   REJECTION_COUNT=$((REJECTION_COUNT + 1))
+
+   # Check escalation limit
+   if [ $REJECTION_COUNT -gt 3 ]; then
+     echo "⚠️  Code review rejected $REJECTION_COUNT times"
+     echo ""
+     echo "Issues may require architectural changes beyond subagent scope."
+     echo "Reporting to user for manual intervention:"
+     echo ""
+     # Display all issues from latest review
+     # Suggest: Review architectural assumptions, may need spec revision
+     exit 1
+   fi
+
+   # Dispatch fix subagent
+   echo "🔧 Dispatching fix subagent to address issues (attempt $REJECTION_COUNT)..."
+
+   # Use Task tool to dispatch fix subagent:
+   Task(Fix Phase {N} code review issues)
+   Prompt: Fix the following issues found in Phase {N} code review:
+
+   {List all issues from review output with severity (Critical/Important/Minor) and file locations}
+
+   CONTEXT FOR FIXES:
+
+   1. Read constitution (if exists): docs/constitutions/current/
+
+   2. Read feature specification: specs/{run-id}-{feature-slug}/spec.md
+
+      The spec provides architectural context for fixes:
+      - WHY decisions were made (rationale for current implementation)
+      - HOW features should integrate (system boundaries)
+      - WHAT requirements must be met (acceptance criteria)
+
+   3. Apply fixes following spec + constitution patterns
+
+   CRITICAL: Work in .worktrees/{runid}-main
+   CRITICAL: Amend existing branch or add new commit (do NOT create new branch)
+   CRITICAL: Run all quality checks before completion (test, lint, build)
+   CRITICAL: Verify all issues resolved before reporting completion
+
+   # After fix completes
+   echo "⏺ Re-reviewing Phase {N} after fixes (iteration $((REJECTION_COUNT + 1)))..."
+   # Return to step 1 (dispatch review again)
+   ```
+
+   **On approval after fixes:**
+   ```bash
+   echo "✅ Code review APPROVED (after $REJECTION_COUNT fix iteration(s)) - Phase {N} complete"
+   ```
+
+   **Escalation triggers:**
+   - After 3 rejections: Stop and report to user
+   - Prevents infinite loops on unsolvable architectural problems
+   - User can review, adjust spec, or proceed manually
 
 **Critical:** Only "Ready to merge? Yes" allows proceeding. Everything else stops execution.
 
@@ -382,6 +450,9 @@ gs branch create task-2
 | "Switch to base between tasks for clean state" | Clean = committed. Stay on task branch for natural stacking. |
 | "Clean up build artifacts between tasks" | Artifacts don't interfere. Git manages source, build tools manage artifacts. |
 | "Create phase-specific worktree" | Sequential phases share main worktree. No isolation needed. |
+| "Review rejected, let me ask user what to do" | Autonomous execution means automatic fixes. No asking. |
+| "Issues are complex, user should decide" | Fix subagent handles complexity. That's the architecture. |
+| "Safer to get user input before fixing" | Re-review provides safety. Fix, review, repeat until clean. |
 
 ## Red Flags - STOP and Follow Process
 
