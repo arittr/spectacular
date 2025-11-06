@@ -37,6 +37,21 @@ SEQUENTIAL PHASE = MAIN WORKTREE + NATURAL STACKING
 
 **No manual commands needed.** The workflow IS the stacking.
 
+## Rationalization Table
+
+**Predictable shortcuts you WILL be tempted to make. DO NOT make them.**
+
+| Temptation | Why It's Wrong | What To Do |
+|------------|----------------|------------|
+| "The spec is too long, I'll just read the task description" | Task = WHAT files + verification. Spec = WHY architecture + requirements. Missing spec → drift. | Read the full spec. It's 2-5 minutes that prevents hours of rework. |
+| "I already read the constitution, that's enough context" | Constitution = HOW to code. Spec = WHAT to build. Both needed for anchored implementation. | Read constitution AND spec, every time. |
+| "The acceptance criteria are clear, I don't need the spec" | Acceptance criteria = tests pass, files exist. Spec = user flow, business logic, edge cases. | Acceptance criteria verify implementation. Spec defines requirements. |
+| "I'm a subagent in a sequential phase, I'll skip the spec since previous task probably read it" | Each subagent has isolated context. Previous task's spec reading doesn't transfer to you. | Every subagent reads spec independently. No shortcuts. |
+| "The spec doesn't exist / I can't find it" | If spec missing, STOP and report error. Never proceed without spec. | Check `specs/{run-id}-{feature-slug}/spec.md`. If missing, fail loudly. |
+| "I'll implement first, then check spec to verify" | Spec informs design decisions. Checking after implementation means rework. | Read spec BEFORE writing any code. |
+
+**If you find yourself thinking "I can skip the spec because..." - STOP. You're rationalizing. Read the spec.**
+
 ## The Process
 
 **Announce:** "I'm using executing-sequential-phase to execute {N} tasks sequentially in Phase {phase-id}."
@@ -81,19 +96,29 @@ INSTRUCTIONS:
 
 2. Read constitution (if exists): docs/constitutions/current/
 
-3. Implement task
+3. Read feature specification: specs/{run-id}-{feature-slug}/spec.md
 
-4. Run quality checks with exit code validation:
+   This provides:
+   - WHAT to build (requirements, user flows)
+   - WHY decisions were made (architecture rationale)
+   - HOW features integrate (system boundaries)
+
+   The spec is your source of truth for architectural decisions.
+   Constitution tells you HOW to code. Spec tells you WHAT to build.
+
+4. Implement task following spec + constitution
+
+5. Run quality checks with exit code validation:
    npm test; if [ $? -ne 0 ]; then exit 1; fi
    npm run lint; if [ $? -ne 0 ]; then exit 1; fi
    npm run build; if [ $? -ne 0 ]; then exit 1; fi
 
-5. Create stacked branch (CRITICAL - Stage THEN create):
+6. Create stacked branch (CRITICAL - Stage THEN create):
    a) git add .
    b) gs branch create {run-id}-task-{phase}-{task}-{name} -m "[Task {phase}-{task}] {task-name}"
    c) Stay on this branch (next task builds on it)
 
-6. Report completion
+7. Report completion
 
 CRITICAL:
 - Work in {run-id}-main worktree (shared)
@@ -207,11 +232,11 @@ Use `requesting-code-review` skill to call code-reviewer agent, then parse resul
      - Dispatch fix subagent or report to user
      - Go to step 3 (re-review after fixes)
 
-   - ❌ **No output / empty response** → FAILURE
-     - STOP execution
-     - Report: "❌ Code review returned no output - treating as FAILURE"
-     - Suggest: "Check review agent logs, may need to re-run review"
-     - DO NOT proceed
+   - ⚠️ **No output / empty response** → RETRY ONCE
+     - Warn: "⚠️ Code review returned no output - retrying once"
+     - This may be a transient issue (timeout, connection error)
+     - Go to step 3 (retry review)
+     - If retry ALSO has no output → FAILURE (go to step 4)
 
    - ❌ **Soft language (e.g., "APPROVED WITH MINOR SUGGESTIONS")** → REJECTED
      - STOP execution
@@ -219,13 +244,33 @@ Use `requesting-code-review` skill to call code-reviewer agent, then parse resul
      - Warn: "Binary gate requires explicit 'Ready to merge? Yes'"
      - Go to step 3 (re-review)
 
-   - ❌ **Missing "Ready to merge?" field** → FAILURE
-     - STOP execution
-     - Report: "❌ Code review output missing 'Ready to merge?' field"
-     - Suggest: "Review agent may not be following template"
-     - Fail execution
+   - ⚠️ **Missing "Ready to merge?" field** → RETRY ONCE
+     - Warn: "⚠️ Code review output missing 'Ready to merge?' field - retrying once"
+     - This may be a transient issue (network glitch, model error)
+     - Go to step 3 (retry review)
+     - If retry ALSO missing field → FAILURE (go to step 4)
 
-3. **Re-review loop (if REJECTED):**
+3. **Retry review (if malformed output):**
+   - Dispatch `requesting-code-review` skill again with same parameters
+   - Parse retry output using step 2 binary algorithm
+   - If retry succeeds with "Ready to merge? Yes":
+     - Announce: "✅ Code review APPROVED (retry succeeded) - Phase {N} complete, proceeding"
+     - Continue to next phase
+   - If retry returns valid verdict (No/With fixes):
+     - Follow normal REJECTED flow (fix issues, re-review)
+   - If retry ALSO has missing "Ready to merge?" field:
+     - Go to step 4 (both attempts failed)
+
+4. **Both attempts malformed (FAILURE):**
+   - STOP execution immediately
+   - Report: "❌ Code review failed twice with malformed output"
+   - Display excerpts from both attempts for debugging
+   - Suggest: "Review agent may not be following template - check code-reviewer skill"
+   - DO NOT hallucinate issues from malformed text
+   - DO NOT dispatch fix subagents
+   - Fail execution
+
+5. **Re-review loop (if REJECTED with valid verdict):**
    - Fix all issues identified by review
    - Return to step 1 (dispatch review again)
    - Repeat until "Ready to merge? Yes"
