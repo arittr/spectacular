@@ -188,10 +188,13 @@ CRITICAL:
 
 5. Run quality checks with exit code validation:
 
+   **CRITICAL**: Use heredoc to prevent bash parsing errors:
+
+   ```bash
+   bash <<'EOF'
    npm test
    if [ $? -ne 0 ]; then
      echo "❌ Tests failed"
-     echo "Fix test failures before creating branch"
      exit 1
    fi
 
@@ -206,6 +209,10 @@ CRITICAL:
      echo "❌ Build failed"
      exit 1
    fi
+   EOF
+   ```
+
+   **Why heredoc**: Prevents parsing errors when commands are wrapped by orchestrator.
 
    Do NOT create branch if quality checks fail
 
