@@ -1,3 +1,12 @@
+---
+id: bash-pattern-consistency
+type: integration
+severity: major
+estimated_duration: 5m
+requires_git_repo: false
+tags: [bash-patterns, consistency, safety, orchestrator]
+---
+
 # Test Scenario: Bash Command Pattern Consistency
 
 ## Context
@@ -191,6 +200,86 @@ echo "  ❌ Commands after pipes without bash context"
 - [ ] Commands reference the same pattern used in skills
 - [ ] Test scenarios document safe patterns only
 - [ ] No examples showing unsafe multi-line patterns
+
+## Verification Commands
+
+```bash
+# Pattern 1: Find all heredoc usage (safe pattern)
+echo "=== Heredoc patterns (SAFE) ==="
+grep -n "bash <<'EOF'" skills/executing-sequential-phase/SKILL.md skills/executing-parallel-phase/SKILL.md
+
+# Pattern 2: Find multi-line if statements
+echo ""
+echo "=== Multi-line if statements (check context) ==="
+grep -n "if \[ \$? -ne 0 \]" skills/executing-sequential-phase/SKILL.md skills/executing-parallel-phase/SKILL.md -A 3
+
+# Pattern 3: Check for variable capture after pipes (UNSAFE)
+echo ""
+echo "=== Variable capture patterns ==="
+grep -n "EXIT_CODE=\|PIPESTATUS" skills/executing-sequential-phase/SKILL.md skills/executing-parallel-phase/SKILL.md
+
+# Pattern 4: Check for commands after pipes (UNSAFE)
+echo ""
+echo "=== Commands after pipes (potential parsing issues) ==="
+grep -n "| tail\|| grep" skills/executing-sequential-phase/SKILL.md skills/executing-parallel-phase/SKILL.md -A 1
+
+# Pattern 5: Verify consistent quality check patterns
+echo ""
+echo "=== Quality check sections ==="
+grep -n "npm test\|pytest\|cargo test" skills/executing-sequential-phase/SKILL.md skills/executing-parallel-phase/SKILL.md -B 2 -A 5
+```
+
+## Evidence of PASS
+
+### Pattern Standardization
+- [ ] Both skills use heredoc pattern: `bash <<'EOF' ... EOF`
+- [ ] IDENTICAL quality check implementation in sequential and parallel skills
+- [ ] All multi-line bash wrapped in heredoc (no bare multi-line if statements)
+- [ ] Single quotes on EOF markers: `'EOF'` to prevent variable expansion
+
+### Unsafe Pattern Elimination
+- [ ] NO variable capture after pipes (`EXIT_CODE=${PIPESTATUS[0]}`)
+- [ ] NO echo/commands after pipes without bash context
+- [ ] NO multi-line if statements outside heredoc wrapper
+- [ ] All exit code checks use `$?` immediately after command
+
+### Documentation Quality
+- [ ] Pattern includes explanatory comment: "Why heredoc: Prevents parsing errors"
+- [ ] Error messages included for debugging: `echo "❌ Tests failed"`
+- [ ] Each quality check (test, lint, build) has own if block
+- [ ] Consistent formatting between sequential and parallel skills
+
+### Verification Success
+- [ ] `grep "bash <<'EOF'"` finds matches in both skills
+- [ ] No `PIPESTATUS` or variable capture after pipes found
+- [ ] All if statements are within heredoc blocks
+- [ ] Sequential and parallel skills show identical patterns
+
+## Evidence of FAIL
+
+### Unsafe Patterns Detected
+- [ ] Multi-line if statements found outside heredoc wrapper
+- [ ] Variable capture after pipes: `EXIT_CODE=${PIPESTATUS[0]}`
+- [ ] Commands after pipes without bash context
+- [ ] Echo statements in pipe chains
+
+### Inconsistency Detected
+- [ ] Sequential skill uses different pattern than parallel skill
+- [ ] Single-line pattern in one skill, multi-line in another
+- [ ] Missing heredoc wrapper in one or both skills
+- [ ] Different error messages or formatting
+
+### Documentation Issues
+- [ ] Missing explanatory comments about heredoc usage
+- [ ] No error messages for debugging
+- [ ] Unclear which pattern is "correct"
+- [ ] Examples show unsafe patterns
+
+### Verification Failures
+- [ ] `grep "bash <<'EOF'"` returns no matches or only one skill
+- [ ] `grep "PIPESTATUS"` finds unsafe variable capture
+- [ ] Quality check patterns differ between skills
+- [ ] Parsing errors when orchestrator wraps commands
 
 ## Files to Check
 

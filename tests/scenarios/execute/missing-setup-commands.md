@@ -1,3 +1,11 @@
+---
+id: missing-setup-commands
+type: integration
+severity: critical
+duration: 3m
+tags: [setup, validation, error-handling]
+---
+
 # Test Scenario: Missing Setup Commands
 
 ## Context
@@ -335,6 +343,108 @@ When testing this scenario, verify:
 - [ ] Documentation link included
 - [ ] User can fix and resume successfully
 - [ ] No orphaned state left behind on error
+
+## Verification Commands
+
+### Setup Validation
+
+**Check for setup command detection:**
+```bash
+# Verify CLAUDE.md is being parsed for setup commands
+grep -A 10 "^### Setup" CLAUDE.md
+
+# Verify install command extracted correctly
+grep -A 10 "^### Setup" CLAUDE.md | grep "^- \*\*install\*\*:"
+
+# Verify postinstall command extracted correctly (optional)
+grep -A 10 "^### Setup" CLAUDE.md | grep "^- \*\*postinstall\*\*:"
+```
+
+### Error Message Detection
+
+**Check for proper error handling:**
+```bash
+# Verify execution stops if setup commands missing
+# Should see error output, not subagent spawn
+
+# Check that error message includes required elements
+# Expected in error output:
+# - "Setup commands not defined"
+# - "Add this section to CLAUDE.md:"
+# - Example markdown section
+# - Documentation URL
+
+# Verify no worktrees created on validation failure
+ls .worktrees/ 2>/dev/null | wc -l  # Should be 0 if setup missing
+```
+
+### CLAUDE.md Parsing
+
+**Verify parsing logic handles edge cases:**
+```bash
+# Test missing CLAUDE.md file
+[ ! -f CLAUDE.md ] && echo "CLAUDE.md missing - should error clearly"
+
+# Test empty CLAUDE.md
+[ -f CLAUDE.md ] && [ ! -s CLAUDE.md ] && echo "CLAUDE.md empty - should error"
+
+# Test CLAUDE.md with wrong format
+grep -q "install:" CLAUDE.md && echo "Wrong format detected"
+grep -q "^- \*\*install\*\*:" CLAUDE.md && echo "Correct format detected"
+```
+
+## Evidence of PASS
+
+**Orchestrator validates setup commands exist:**
+- [ ] Parses CLAUDE.md for "### Setup" section
+- [ ] Extracts install command from correct markdown format: `- **install**: \`cmd\``
+- [ ] Validation happens in Step 2, BEFORE creating worktrees
+- [ ] No subagents spawned if validation fails
+
+**Clear error messages displayed:**
+- [ ] Error message explains what is missing ("Setup commands not defined")
+- [ ] Error message explains why needed ("Worktrees require dependency installation")
+- [ ] Error message shows how to fix (example CLAUDE.md section)
+- [ ] Error message includes multi-language examples (npm, pip, cargo, go)
+- [ ] Error message includes documentation link
+
+**Execution stops cleanly:**
+- [ ] Exit code is non-zero (failure state)
+- [ ] No worktrees created in .worktrees/ directory
+- [ ] No orphaned state left behind
+- [ ] No confusing stack traces or npm errors
+
+**Resume after fix works:**
+- [ ] User adds setup section to CLAUDE.md
+- [ ] Re-running execute detects setup commands
+- [ ] Setup runs correctly with new commands
+- [ ] Execution proceeds to parallel task execution
+
+## Evidence of FAIL
+
+**No validation (worst case):**
+- [ ] Execution proceeds without checking CLAUDE.md
+- [ ] Worktrees created without dependencies
+- [ ] Subagents fail with "command not found" errors
+- [ ] User sees npm/node errors instead of setup validation error
+
+**Unclear error messages:**
+- [ ] Error says "Invalid CLAUDE.md" without specifics
+- [ ] No example showing what to add
+- [ ] No documentation link provided
+- [ ] User doesn't know how to fix the issue
+
+**Late validation (creates orphaned state):**
+- [ ] Worktrees created before validation runs
+- [ ] Validation fails after worktrees exist
+- [ ] Orphaned directories in .worktrees/
+- [ ] User must manually clean up state
+
+**Wrong format detection:**
+- [ ] Parser accepts incorrect markdown format
+- [ ] Setup commands defined but not detected
+- [ ] Regex fails to extract command properly
+- [ ] Execution fails with unclear error later
 
 ## Related Scenarios
 

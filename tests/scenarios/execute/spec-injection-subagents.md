@@ -1,3 +1,12 @@
+---
+id: spec-injection-subagents
+type: integration
+severity: critical
+estimated_duration: 5m
+requires_git_repo: false
+tags: [spec-anchoring, subagent-context, constitution, architecture-drift]
+---
+
 # Test Scenario: Spec Injection into Subagent Context
 
 ## Context
@@ -353,6 +362,67 @@ Result: Fix passes code review but breaks integration
 - [ ] Clear explanation of spec vs constitution vs plan context
 - [ ] No vague "read project docs" language
 - [ ] Consistent pattern across all subagent types (task + fix)
+
+## Verification Commands
+
+```bash
+# Check sequential phase task subagent prompt for spec anchoring
+grep -A 10 "Read feature specification" skills/executing-sequential-phase/SKILL.md | head -15
+grep -n "specs/{run-id}-{feature-slug}/spec.md" skills/executing-sequential-phase/SKILL.md
+
+# Check parallel phase task subagent prompt for spec anchoring
+grep -A 10 "Read feature specification" skills/executing-parallel-phase/SKILL.md | head -15
+grep -n "specs/{run-id}-{feature-slug}/spec.md" skills/executing-parallel-phase/SKILL.md
+
+# Check fix subagent prompts in both phases
+grep -A 15 "CONTEXT FOR FIXES" skills/executing-sequential-phase/SKILL.md
+grep -A 15 "CONTEXT FOR FIXES" skills/executing-parallel-phase/SKILL.md
+
+# Verify spec reading comes BEFORE implementation step
+grep -B 2 -A 2 "Implement task following spec" skills/executing-sequential-phase/SKILL.md
+grep -B 2 -A 2 "Implement task following spec" skills/executing-parallel-phase/SKILL.md
+
+# Verify constitution reading comes BEFORE spec reading
+grep -B 2 "Read feature specification" skills/executing-sequential-phase/SKILL.md
+```
+
+## Evidence of PASS
+
+### Task Subagent Prompts (Sequential & Parallel)
+- [ ] Both skills contain: "Read feature specification:" instruction
+- [ ] Spec path format: `specs/{run-id}-{feature-slug}/spec.md`
+- [ ] Spec reading instruction comes AFTER constitution reading
+- [ ] Spec reading instruction comes BEFORE implementation step
+- [ ] Explanation included: "This provides: WHAT to build, WHY decisions, HOW features integrate"
+- [ ] Spec reading is MANDATORY (not "if exists" or "optionally")
+
+### Fix Subagent Prompts (Sequential & Parallel)
+- [ ] Both skills contain: "CONTEXT FOR FIXES" section
+- [ ] Section includes: "Read constitution (if exists): docs/constitutions/current/"
+- [ ] Section includes: "Read feature specification: specs/{run-id}-{feature-slug}/spec.md"
+- [ ] Explanation for fixes: "WHY decisions were made, HOW features integrate, WHAT requirements"
+- [ ] Spec reading comes BEFORE "Apply fixes" step
+- [ ] Same anchoring pattern as regular task subagents
+
+### Consistency
+- [ ] All 4 subagent types have spec anchoring (sequential task, parallel task, sequential fix, parallel fix)
+- [ ] Spec path format identical across all prompts
+- [ ] Constitution → Spec → Implementation ordering consistent
+- [ ] NO vague language like "review project documentation"
+- [ ] NO optional spec reading ("if needed", "optionally")
+
+## Evidence of FAIL
+
+- [ ] Missing "Read feature specification" in any subagent prompt
+- [ ] Vague spec reference: "review project docs", "check requirements"
+- [ ] Wrong spec path format (not using {run-id}-{feature-slug})
+- [ ] Spec reading AFTER implementation step
+- [ ] Spec reading BEFORE constitution step
+- [ ] Optional spec reading: "if exists", "optionally read"
+- [ ] Fix subagents missing spec anchoring
+- [ ] Fix subagents missing "CONTEXT FOR FIXES" section
+- [ ] Inconsistent patterns between task and fix subagents
+- [ ] Verification commands fail or return no matches
 
 ## Implementation Verification
 

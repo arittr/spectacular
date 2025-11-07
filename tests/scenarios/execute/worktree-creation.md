@@ -1,3 +1,11 @@
+---
+id: worktree-creation
+type: integration
+severity: critical
+duration: 3m
+tags: [worktrees, isolation, setup]
+---
+
 # Test Scenario: Worktree Creation (Isolated)
 
 ## Context
@@ -299,3 +307,153 @@ git worktree list | awk '{print $1}' | grep "\.worktrees" | grep -c "\.worktrees
 - **parallel-stacking-3-tasks.md** - Full workflow using these worktrees
 - **cleanup-tmp-branches.md** - Related cleanup concern
 - All parallel stacking scenarios depend on this working correctly
+
+## Verification Commands
+
+```bash
+# 1. Verify worktrees created in correct location
+git worktree list | grep "\.worktrees/{runid}-task-"
+# Expected: Shows .worktrees/{runid}-task-1, task-2, task-3 (no nested paths)
+
+# 2. Verify no nested worktrees
+git worktree list | grep -c "\.worktrees/.*\.worktrees"
+# Expected: 0
+
+# 3. Verify detached HEAD state
+git worktree list | grep "\.worktrees/{runid}-task-" | grep -c "(detached HEAD)"
+# Expected: 3
+
+# 4. Verify all worktrees at same base commit
+BASE_COMMIT=$(git rev-parse {runid}-main)
+for i in 1 2 3; do
+  TASK_COMMIT=$(git -C .worktrees/{runid}-task-$i rev-parse HEAD)
+  [ "$TASK_COMMIT" = "$BASE_COMMIT" ] && echo "task-$i: ✓" || echo "task-$i: ✗"
+done
+# Expected: All show ✓
+
+# 5. Verify no temporary branches created
+git branch | grep -- "-tmp$"
+# Expected: Empty output
+
+# 6. Verify worktree isolation
+ls -d .worktrees/{runid}-task-*
+# Expected: Shows 3 directories
+
+# 7. Verify main repo accessible
+git -C "$(git rev-parse --show-toplevel)" status
+# Expected: Clean working directory
+```
+
+## Evidence of PASS
+
+**Worktree Creation:**
+```
+$ git worktree list
+/path/to/repo                           <commit> [main]
+/path/to/repo/.worktrees/{runid}-main   <commit> [{runid}-main]
+/path/to/repo/.worktrees/{runid}-task-1 <commit> (detached HEAD)
+/path/to/repo/.worktrees/{runid}-task-2 <commit> (detached HEAD)
+/path/to/repo/.worktrees/{runid}-task-3 <commit> (detached HEAD)
+```
+
+**Path Correctness:**
+```
+$ git worktree list | grep -c "\.worktrees/.*\.worktrees"
+0
+```
+
+**Base Branch Usage:**
+```
+$ BASE_COMMIT=$(git rev-parse {runid}-main)
+$ for i in 1 2 3; do
+    TASK_COMMIT=$(git -C .worktrees/{runid}-task-$i rev-parse HEAD)
+    [ "$TASK_COMMIT" = "$BASE_COMMIT" ] && echo "task-$i: ✓" || echo "task-$i: ✗"
+  done
+task-1: ✓
+task-2: ✓
+task-3: ✓
+```
+
+**No Temporary Branches:**
+```
+$ git branch | grep -- "-tmp$"
+(empty output)
+```
+
+**Directory Structure:**
+```
+$ ls -ld .worktrees/{runid}-task-*
+drwxr-xr-x  .worktrees/{runid}-task-1
+drwxr-xr-x  .worktrees/{runid}-task-2
+drwxr-xr-x  .worktrees/{runid}-task-3
+```
+
+**Isolation Verified:**
+```
+$ cd .worktrees/{runid}-task-1 && git status
+HEAD detached at <commit>
+nothing to commit, working tree clean
+
+$ cd ../../ && pwd
+/path/to/repo
+```
+
+## Evidence of FAIL
+
+**❌ Nested Worktree Paths:**
+```
+$ git worktree list
+/path/to/repo/.worktrees/{runid}-main/.worktrees/{runid}-task-1 <commit> (detached HEAD)
+                                       ^^^^^^^^^^
+                                       nested path!
+```
+
+**❌ Missing Worktrees:**
+```
+$ git worktree list
+/path/to/repo                           <commit> [main]
+/path/to/repo/.worktrees/{runid}-main   <commit> [{runid}-main]
+(only 2 entries - task worktrees not created)
+```
+
+**❌ Wrong Base Branch:**
+```
+$ BASE_COMMIT=$(git rev-parse {runid}-main)
+$ TASK_COMMIT=$(git -C .worktrees/{runid}-task-1 rev-parse HEAD)
+$ [ "$TASK_COMMIT" = "$BASE_COMMIT" ] && echo "✓" || echo "✗"
+✗
+
+$ git log --oneline -1 $(git -C .worktrees/{runid}-task-1 rev-parse HEAD)
+abc1234 Some old commit from main branch
+(task-1 created from 'main' instead of '{runid}-main')
+```
+
+**❌ Worktrees Not Accessible:**
+```
+$ cd .worktrees/{runid}-task-1
+fatal: cannot change to '/path/to/repo/.worktrees/{runid}-task-1': No such file or directory
+```
+
+**❌ Temporary Branches Created:**
+```
+$ git branch | grep -- "-tmp$"
+  {runid}-task-1-tmp
+  {runid}-task-2-tmp
+  {runid}-task-3-tmp
+(pollutes branch list, wrong pattern used)
+```
+
+**❌ Nested Worktree Directory:**
+```
+$ ls -ld .worktrees/{runid}-main/.worktrees/{runid}-task-1
+drwxr-xr-x  .worktrees/{runid}-main/.worktrees/{runid}-task-1
+(created inside main worktree instead of repo root)
+```
+
+**❌ Main Repo Not Accessible:**
+```
+$ REPO_ROOT=$(git rev-parse --show-toplevel)
+$ pwd
+/path/to/repo/.worktrees/{runid}-main
+(stuck in worktree, can't navigate to main repo)
+```
