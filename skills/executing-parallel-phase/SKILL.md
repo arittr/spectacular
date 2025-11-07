@@ -100,16 +100,50 @@ echo "✅ Pre-conditions verified - safe to create task worktrees"
 
 **Red flag:** "Skip verification to save time" - NO. 20ms verification saves hours of debugging.
 
+### Step 1.5: Check for Existing Work (Resume Support)
+
+**Before creating worktrees, check if tasks are already complete:**
+
+```bash
+COMPLETED_TASKS=()
+PENDING_TASKS=()
+
+for TASK_ID in {task-ids}; do
+  BRANCH_NAME="{runid}-task-{phase-id}-${TASK_ID}-{short-name}"
+
+  if git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
+    echo "✓ Task ${TASK_ID} already complete: $BRANCH_NAME"
+    COMPLETED_TASKS+=("$TASK_ID")
+  else
+    PENDING_TASKS+=("$TASK_ID")
+  fi
+done
+
+if [ ${#PENDING_TASKS[@]} -eq 0 ]; then
+  echo "✅ All tasks already complete, skipping to stacking"
+  # Jump to Step 6 (Stacking)
+else
+  echo "📋 Resuming: ${#COMPLETED_TASKS[@]} complete, ${#PENDING_TASKS[@]} pending"
+  echo "Will execute tasks: ${PENDING_TASKS[*]}"
+fi
+```
+
+**Why check:** Enables resume after fixing failed tasks. Avoids re-executing successful tasks, which wastes time and can cause conflicts.
+
+**Red flags:**
+- "Always create all worktrees" - NO. Wastes resources on already-completed work.
+- "Trust orchestrator state" - NO. Branches are source of truth.
+
 ### Step 2: Create Worktrees (BEFORE Subagents)
 
-**Create isolated worktree for EACH task:**
+**Create isolated worktree for EACH PENDING task (skip completed tasks):**
 
 ```bash
 # Get base branch from main worktree
 BASE_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
 
-# Create worktrees in DETACHED HEAD state
-for TASK_ID in {task-ids}; do
+# Create worktrees only for pending tasks (from Step 1.5)
+for TASK_ID in "${PENDING_TASKS[@]}"; do
   git worktree add ".worktrees/{runid}-task-${TASK_ID}" --detach "$BASE_BRANCH"
   echo "✅ Created .worktrees/{runid}-task-${TASK_ID} (detached HEAD)"
 done
@@ -122,9 +156,10 @@ git worktree list | grep "{runid}-task-"
 
 ```bash
 CREATED_COUNT=$(git worktree list | grep -c "{runid}-task-")
+EXPECTED_COUNT=${#PENDING_TASKS[@]}
 
-if [ $CREATED_COUNT -ne {expected-count} ]; then
-  echo "❌ Error: Expected {expected-count} worktrees, found $CREATED_COUNT"
+if [ $CREATED_COUNT -ne $EXPECTED_COUNT ]; then
+  echo "❌ Error: Expected $EXPECTED_COUNT worktrees, found $CREATED_COUNT"
   exit 1
 fi
 
@@ -139,10 +174,10 @@ echo "✅ Created $CREATED_COUNT worktrees for parallel execution"
 
 ### Step 3: Install Dependencies Per Worktree
 
-**Each worktree needs its own dependencies:**
+**Each PENDING worktree needs its own dependencies (skip completed tasks):**
 
 ```bash
-for TASK_ID in {task-ids}; do
+for TASK_ID in "${PENDING_TASKS[@]}"; do
   if [ ! -d .worktrees/{runid}-task-${TASK_ID}/node_modules ]; then
     bash -c "cd .worktrees/{runid}-task-${TASK_ID} && {install-command} && {postinstall-command}"
   fi
@@ -159,7 +194,9 @@ done
 
 **CRITICAL: Single message with multiple Task tools (true parallelism):**
 
-For each task, dispatch with prompt:
+**Only dispatch for PENDING tasks** (from Step 1.5). Completed tasks already have branches and should not be re-executed.
+
+For each pending task, dispatch with prompt:
 ```
 ROLE: Implement Task {task-id} in ISOLATED worktree
 
@@ -194,21 +231,75 @@ CRITICAL:
 
    ```bash
    bash <<'EOF'
-   npm test
-   if [ $? -ne 0 ]; then
-     echo "❌ Tests failed"
+   # Test check with detailed error reporting
+   TEST_OUTPUT=$(npm test 2>&1)
+   TEST_EXIT=$?
+
+   if [ $TEST_EXIT -ne 0 ]; then
+     echo "❌ QUALITY CHECK FAILED"
+     echo ""
+     echo "Check: npm test"
+     echo "Exit code: $TEST_EXIT"
+     echo ""
+     echo "Output:"
+     echo "$TEST_OUTPUT"
+     echo ""
+     echo "Location: $(pwd)"
+     echo ""
+     echo "Next steps:"
+     echo "1. Review test failures above"
+     echo "2. Fix implementation in this worktree"
+     echo "3. Verify fix: npm test"
+     echo "4. Create branch manually: gs branch create {branch-name} -m 'message'"
+     echo "5. Re-run /spectacular:execute to resume"
      exit 1
    fi
 
-   npm run lint
-   if [ $? -ne 0 ]; then
-     echo "❌ Lint failed"
+   # Lint check with detailed error reporting
+   LINT_OUTPUT=$(npm run lint 2>&1)
+   LINT_EXIT=$?
+
+   if [ $LINT_EXIT -ne 0 ]; then
+     echo "❌ QUALITY CHECK FAILED"
+     echo ""
+     echo "Check: npm run lint"
+     echo "Exit code: $LINT_EXIT"
+     echo ""
+     echo "Output:"
+     echo "$LINT_OUTPUT"
+     echo ""
+     echo "Location: $(pwd)"
+     echo ""
+     echo "Next steps:"
+     echo "1. Review lint errors above"
+     echo "2. Fix code in this worktree"
+     echo "3. Verify fix: npm run lint"
+     echo "4. Create branch manually: gs branch create {branch-name} -m 'message'"
+     echo "5. Re-run /spectacular:execute to resume"
      exit 1
    fi
 
-   npm run build
-   if [ $? -ne 0 ]; then
-     echo "❌ Build failed"
+   # Build check with detailed error reporting
+   BUILD_OUTPUT=$(npm run build 2>&1)
+   BUILD_EXIT=$?
+
+   if [ $BUILD_EXIT -ne 0 ]; then
+     echo "❌ QUALITY CHECK FAILED"
+     echo ""
+     echo "Check: npm run build"
+     echo "Exit code: $BUILD_EXIT"
+     echo ""
+     echo "Output:"
+     echo "$BUILD_OUTPUT"
+     echo ""
+     echo "Location: $(pwd)"
+     echo ""
+     echo "Next steps:"
+     echo "1. Review build errors above"
+     echo "2. Fix code in this worktree"
+     echo "3. Verify fix: npm run build"
+     echo "4. Create branch manually: gs branch create {branch-name} -m 'message'"
+     echo "5. Re-run /spectacular:execute to resume"
      exit 1
    fi
    EOF
@@ -229,22 +320,42 @@ CRITICAL:
 
 ### Step 5: Verify Completion (BEFORE Stacking)
 
-**Check all task branches exist:**
+**Check ALL task branches exist (includes both previously completed and newly created):**
 
 ```bash
+COMPLETED_TASKS=()
 FAILED_TASKS=()
 
+# Check ALL task IDs, not just pending - need to verify complete set exists
 for TASK_ID in {task-ids}; do
   BRANCH_NAME="{runid}-task-{phase-id}-${TASK_ID}-{short-name}"
 
-  if ! git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
+  if git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
+    COMPLETED_TASKS+=("Task ${TASK_ID}: $BRANCH_NAME")
+  else
     FAILED_TASKS+=("Task ${TASK_ID}")
   fi
 done
 
 if [ ${#FAILED_TASKS[@]} -gt 0 ]; then
   echo "❌ Phase {phase-id} execution failed"
-  echo "Failed tasks: ${FAILED_TASKS[*]}"
+  echo ""
+  echo "Completed tasks:"
+  for task in "${COMPLETED_TASKS[@]}"; do
+    echo "  ✅ $task"
+  done
+  echo ""
+  echo "Failed tasks:"
+  for task in "${FAILED_TASKS[@]}"; do
+    echo "  ❌ $task"
+  done
+  echo ""
+  echo "To resume:"
+  echo "1. Review subagent output above for failure details"
+  echo "2. Fix failed task(s) in .worktrees/{runid}-task-{phase-id}-{task-id}"
+  echo "3. Run quality checks manually to verify fixes"
+  echo "4. Create branches manually for fixed tasks"
+  echo "5. Re-run /spectacular:execute to complete phase"
   exit 1
 fi
 
@@ -280,10 +391,10 @@ else
     BRANCH="${TASK_BRANCHES[$i]}"
 
     if [ $i -eq 0 ]; then
-      # First task: only track (already at correct position from worktree creation)
+      # First task: track + upstack onto base branch (from previous phase)
       git checkout "$BRANCH"
       gs branch track
-      # NO gs upstack onto - first parallel task is base for subsequent tasks
+      gs upstack onto "$BASE_BRANCH"  # Connect to previous phase's work
     else
       # Subsequent: track + upstack onto previous
       PREV_BRANCH="${TASK_BRANCHES[$((i-1))]}"
@@ -293,6 +404,9 @@ else
     fi
   done
 fi
+
+# Leave main worktree on last branch for next phase continuity
+# Sequential phases will naturally stack on this branch
 
 # Verify stack
 gs log short
@@ -307,6 +421,8 @@ EOF
 
 ### Step 7: Clean Up Worktrees (AFTER Stacking)
 
+**IMPORTANT**: This step only runs if Step 5 verification passes. If any task fails, Step 5 exits with code 1, aborting the workflow. Failed task worktrees are preserved for debugging.
+
 **Remove task worktrees:**
 
 ```bash
@@ -320,6 +436,8 @@ git worktree list | grep "{runid}-task-"
 ```
 
 **Why after stacking:** Branches must be stacked and verified before destroying evidence.
+
+**Why conditional**: Failed worktrees must be preserved so users can debug, fix, and manually create branches before resuming.
 
 ### Step 8: Code Review (Binary Quality Gate)
 
