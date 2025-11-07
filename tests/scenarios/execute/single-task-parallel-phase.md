@@ -1,3 +1,11 @@
+---
+id: single-task-parallel-phase
+type: integration
+severity: major
+duration: 3m
+tags: [parallel-execution, edge-case, single-task]
+---
+
 # Test Scenario: Single Task in Parallel Phase
 
 ## Context
@@ -260,6 +268,100 @@ Create plan with parallel phase containing 1 task:
 # Verify single worktree created and cleaned up
 # Verify branch created and stacked correctly
 ```
+
+## Verification Commands
+
+After execution completes, verify correct N=1 handling:
+
+### Check Parallel Phase Detection
+
+```bash
+# Verify execute.md handles N=1 parallel phases correctly
+grep -A 10 "executing-parallel-phase" /Users/drewritter/.claude/plugins/cache/spectacular/commands/execute.md
+# Should show: N=1 handling logic, no hardcoded N>1 assumptions
+```
+
+### Check Stacking Logic
+
+```bash
+# Verify single-task stacking doesn't attempt upstack to non-existent task 0
+grep -A 20 "Stacking" /Users/drewritter/.claude/plugins/cache/spectacular/skills/executing-parallel-phase/SKILL.md
+# Should show: track command for task 1, proper base branch handling
+```
+
+### Check Worktree Creation
+
+```bash
+# Verify worktree creation loop handles N=1
+grep -A 15 "worktree add" /Users/drewritter/.claude/plugins/cache/spectacular/skills/executing-parallel-phase/SKILL.md
+# Should show: loop works with single iteration
+```
+
+### Check Final Stack Structure
+
+```bash
+# Verify linear chain maintained
+gs log short
+# Should show: previous-phase → single-task (if previous phase exists)
+# OR: main → single-task (if this is only phase)
+
+gs ls
+# Should show proper branch hierarchy with N=1 parallel phase
+```
+
+## Evidence of PASS
+
+### N=1 Handled Correctly
+
+- Single worktree created without errors
+- Parallel execution pattern used (not special-cased to sequential)
+- Subagent spawns in isolated worktree
+- Branch created with correct naming: `{runid}-task-2-1-user-auth`
+
+### Stacking Works with Single Task
+
+- Task 1 gets `gs branch track` command
+- No attempt to run `upstack` to previous task (no task 0)
+- Proper `upstack onto BASE_BRANCH` for cross-phase correctness
+- Verification passes: `gs log short` shows clean linear chain
+
+### Worktree Cleanup Succeeds
+
+- Single worktree removed successfully
+- No stale worktree references in `git worktree list`
+- Branch remains accessible after cleanup
+
+### Cross-Phase Integration
+
+- Phase 2 (N=1) stacks correctly onto Phase 1 (if exists)
+- Phase 3 (if exists) stacks correctly onto Phase 2
+- Overall linear chain maintained: `...→ phase1 → phase2-task1 → phase3...`
+
+## Evidence of FAIL
+
+### Fails on N=1
+
+- Error message: "parallel phase must have at least 2 tasks"
+- Orchestrator special-cases N=1 to use sequential pattern
+- Breaks on array access: `TASK_IDS[1]` when only `TASK_IDS[0]` exists
+
+### Incorrect Stacking Logic
+
+- Attempts `gs upstack onto {runid}-task-2-0-something` (non-existent task 0)
+- Off-by-one error: loop starts at task 0 instead of task 1
+- Stacking verification fails: `gs log short` shows error or broken chain
+
+### Hardcoded Assumptions Broken
+
+- Worktree creation assumes N > 1
+- Stacking loop has hardcoded `for i in {2..$TASK_COUNT}` (skips task 1 when N=1)
+- Verification logic expects multiple branches: `git branch | grep task-2-` returns multiple results
+
+### Cross-Phase Stacking Broken
+
+- Task 1 doesn't stack onto previous phase base branch
+- Missing `upstack onto BASE_BRANCH` call for single task
+- Linear chain broken: `gs ls` shows disconnected branches
 
 ## Why This Matters
 

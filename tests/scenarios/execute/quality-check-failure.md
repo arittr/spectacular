@@ -1,3 +1,11 @@
+---
+id: quality-check-failure
+type: integration
+severity: critical
+duration: 4m
+tags: [quality-checks, error-handling, failure-recovery]
+---
+
 # Test Scenario: Quality Check Failure
 
 ## Context
@@ -381,6 +389,175 @@ cd ../..
 /spectacular:execute
 # Should resume and complete
 ```
+
+## Verification Commands
+
+After running `/spectacular:execute`, verify the behavior:
+
+### 1. Quality Check Execution
+
+```bash
+# Verify quality checks ran before branch creation
+# Look for quality check output in subagent execution logs
+grep -A 5 "npm test" .worktrees/{runid}-task-2/.git/../execution.log
+
+# Verify checks ran in correct order (test → lint → build)
+# Should show test failure and NOT show lint/build running
+```
+
+### 2. Failure Detection
+
+```bash
+# Verify no branch created for failed task
+git branch | grep "{runid}-task-2-2"
+# Should return empty if quality checks failed
+
+# Verify successful tasks created branches
+git branch | grep "{runid}-task-2-1"  # Should exist (Task 1 passed)
+git branch | grep "{runid}-task-2-3"  # Should exist (Task 3 passed)
+
+# Verify worktree still exists for debugging
+ls -la .worktrees/{runid}-task-2
+# Should show worktree directory still present
+```
+
+### 3. Error Reporting
+
+```bash
+# Verify orchestrator detected and reported failure
+# Look for clear error message with:
+# - Which task failed (Task 2)
+# - Which check failed (npm test)
+# - Exit code (1)
+# - Specific test failures
+# - Worktree location for debugging
+# - Next steps for user
+
+# Should see output like:
+# ❌ Phase 2 execution failed
+# Failed task: Task 2
+# Reason: Quality checks failed: npm test (exit code 1)
+# Failed tests:
+#   - POST /api/users › should create new user
+#   - POST /api/users › should validate email format
+# Location: .worktrees/{runid}-task-2
+# Next steps: ...
+```
+
+### 4. No Stacking on Failure
+
+```bash
+# Verify orchestrator stopped before stacking
+# Should NOT see any "Stacking branches" output
+# Should NOT see any gs commands after failure detected
+
+# Verify existing branches not modified
+git log --oneline {runid}-task-2-1  # Should show only Task 1 commits
+git log --oneline {runid}-task-2-3  # Should show only Task 3 commits
+```
+
+### 5. Resume After Fix
+
+```bash
+# After manually fixing and creating branch for Task 2:
+cd .worktrees/{runid}-task-2
+# Fix implementation
+npm test  # Should pass now
+git add .
+gs branch create {runid}-task-2-2-api-endpoints -m "[Task 2-2] API endpoints"
+git switch --detach
+cd ../..
+
+# Re-run execute
+/spectacular:execute
+
+# Verify it detects all branches and proceeds to stacking
+# Should see:
+# ✓ Task 1 branch exists: {runid}-task-2-1-user-management
+# ✓ Task 2 branch exists: {runid}-task-2-2-api-endpoints
+# ✓ Task 3 branch exists: {runid}-task-2-3-api-docs
+# Proceeding to stacking...
+```
+
+## Evidence of PASS
+
+The test passes if:
+
+1. **Quality checks run before branch creation:**
+   - Subagent executes `npm test`, `npm run lint`, `npm run build` in sequence
+   - All quality check output visible in logs
+   - Checks run BEFORE `git add` and `gs branch create` commands
+   - First failure stops execution (subsequent checks don't run)
+
+2. **Failures stop execution:**
+   - Exit code 1 from quality check command detected
+   - Subagent does NOT create branch when quality checks fail
+   - Subagent reports failure to orchestrator with specific check name
+   - Orchestrator stops phase execution before stacking
+
+3. **Clear error messages:**
+   - Error output shows which check failed (test/lint/build)
+   - Full command output included (test names, lint errors, build errors)
+   - Specific failures highlighted (which tests failed, which lint rules violated)
+   - Exit code included in error message
+
+4. **Worktree preserved for debugging:**
+   - Failed task worktree remains in `.worktrees/{runid}-task-2`
+   - User can `cd` into worktree to inspect and fix
+   - All changes preserved (uncommitted but staged)
+   - Can run quality checks manually to verify fix
+
+5. **No branches created on failure:**
+   - `git branch | grep "{runid}-task-2-2"` returns empty
+   - Successful parallel tasks created branches normally
+   - No partial commits or orphaned branches
+   - Git state clean except for worktrees
+
+6. **Actionable resume instructions:**
+   - Error message includes worktree path
+   - Clear steps to fix: cd to worktree, fix code, verify, create branch manually
+   - Explanation of how to resume: re-run `/spectacular:execute`
+   - Resume detection works: skips completed tasks, proceeds to stacking
+
+## Evidence of FAIL
+
+The test fails if:
+
+1. **Branch created before quality checks:**
+   - `gs branch create` runs before quality check commands
+   - Branch exists even though quality checks failed
+   - Failed code committed to git history
+   - Branch must be deleted manually to clean up
+
+2. **Execution continues despite failure:**
+   - Orchestrator proceeds to stacking after quality check failure
+   - Successful tasks stacked onto failed task branch
+   - Phase marked as complete even though task failed
+   - No error reported to user
+
+3. **Unclear error messages:**
+   - Generic error like "Task 2 failed" without specifics
+   - No indication of which quality check failed
+   - No command output or specific test/lint/build errors
+   - Missing worktree location or next steps
+
+4. **Worktree cleaned on failure:**
+   - `.worktrees/{runid}-task-2` directory removed
+   - User cannot inspect or fix failed code
+   - Must re-run entire task to retry
+   - No debugging capability preserved
+
+5. **Exit code not checked:**
+   - Quality check command runs but exit code ignored
+   - Failures treated as success (exit code 0 assumed)
+   - Branch created despite command returning exit code 1
+   - No failure detection at all
+
+6. **Wrong check order:**
+   - Build runs even though tests failed
+   - All checks run instead of stopping at first failure
+   - Wasted execution time on checks that won't pass
+   - Confusing output with multiple failures shown
 
 ## Related Scenarios
 

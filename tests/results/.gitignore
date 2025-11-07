@@ -1,0 +1,14 @@
+# Test Results Storage Policy
+# Commit summaries, ignore detailed logs
+
+# Ignore all logs
+*.log
+
+# Ignore evidence directories
+evidence/
+
+# Ignore latest symlink (points to local run)
+latest
+
+# Commit summary files
+!summary.md
