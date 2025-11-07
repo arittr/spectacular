@@ -1,3 +1,12 @@
+---
+id: mixed-sequential-parallel-phases
+type: integration
+severity: critical
+estimated_duration: 7m
+requires_git_repo: true
+tags: [sequential, parallel, cross-phase, stacking, phase-transitions]
+---
+
 # Test Scenario: Mixed Sequential + Parallel Phases
 
 ## Context
@@ -158,6 +167,34 @@ gs ls
 
 Perfect linear chain across all phases! 🎉
 
+## Verification Commands
+
+```bash
+# Verify phase transition logic from sequential → parallel
+echo "=== Phase 1 → Phase 2 Transition Logic ==="
+grep -n "Get current branch from main worktree" commands/execute.md skills/executing-parallel-phase/SKILL.md -A 5
+
+# Check base branch inheritance for parallel phases
+echo ""
+echo "=== Base Branch Inheritance Pattern ==="
+grep -n "BASE_BRANCH=" commands/execute.md skills/executing-parallel-phase/SKILL.md -A 3
+
+# Verify cross-phase stacking (parallel branches stack linearly after completion)
+echo ""
+echo "=== Cross-Phase Stacking Implementation ==="
+grep -n "gs upstack onto" skills/executing-parallel-phase/SKILL.md -B 2 -A 3
+
+# Verify main worktree left on correct branch after parallel phase
+echo ""
+echo "=== Main Worktree State After Parallel Phase ==="
+grep -n "Leave main worktree on latest branch" skills/executing-parallel-phase/SKILL.md -B 3 -A 3
+
+# Check phase transition from parallel → sequential
+echo ""
+echo "=== Phase 2 → Phase 3 Transition (Natural Stacking Resumes) ==="
+grep -n "gs branch create" skills/executing-sequential-phase/SKILL.md -B 2 -A 2
+```
+
 ## Success Criteria
 
 ### Cross-Phase Stacking
@@ -191,6 +228,88 @@ Perfect linear chain across all phases! 🎉
 - [ ] `gs log short` shows 5 commits in order
 - [ ] All branches accessible from main repo
 - [ ] No orphaned branches or worktrees
+
+## Evidence of PASS
+
+### Phase Transitions Execute Correctly
+- [ ] Phase 1 (sequential) completes, leaving main worktree on `{runid}-task-1-1-database-schema`
+- [ ] Phase 2 (parallel) base branch detection: `BASE_BRANCH={runid}-task-1-1-database-schema`
+- [ ] Phase 2 worktrees created from Phase 1's branch (verified with `git log` in worktree)
+- [ ] Phase 2 stacking completes, leaving main worktree on `{runid}-task-2-3-frontend-ui`
+- [ ] Phase 3 (sequential) creates branch from Phase 2's last branch automatically
+
+### Branches Inherit Properly Across Phase Types
+- [ ] `git log {runid}-task-2-1-user-auth` shows Phase 1 database commit in history
+- [ ] `git log {runid}-task-2-2-api-endpoints` shows Phase 1 database + Phase 2 task-1 commits
+- [ ] `git log {runid}-task-2-3-frontend-ui` shows Phase 1 database + Phase 2 task-1 + task-2 commits
+- [ ] `git log {runid}-task-3-1-integration-tests` shows all Phase 1 + Phase 2 commits in history
+
+### Linear Stack Maintained Across Phase Types
+- [ ] `gs ls` output shows perfect linear chain (no branches):
+  ```
+  main
+  └─□ {runid}-main
+     └─□ {runid}-task-1-1-database-schema      [Phase 1 sequential]
+        └─□ {runid}-task-2-1-user-auth         [Phase 2 parallel]
+           └─□ {runid}-task-2-2-api-endpoints   [Phase 2 parallel]
+              └─□ {runid}-task-2-3-frontend-ui  [Phase 2 parallel]
+                 └─□ {runid}-task-3-1-integration-tests  [Phase 3 sequential]
+  ```
+- [ ] No branching structure (all tasks in single chain)
+- [ ] Each branch parent is previous task's branch
+- [ ] Sequential tasks naturally stack on current HEAD
+- [ ] Parallel tasks manually stacked linearly after execution
+
+### Worktree State Consistent
+- [ ] After Phase 1: Only `{runid}-main` worktree exists, on Phase 1 branch
+- [ ] During Phase 2: 4 worktrees total (main + 3 parallel task worktrees)
+- [ ] After Phase 2 cleanup: Only `{runid}-main` worktree exists, on Phase 2 last branch
+- [ ] After Phase 3: Only `{runid}-main` worktree exists, on Phase 3 branch
+- [ ] Main worktree never removed during execution
+
+### Verification Commands Succeed
+- [ ] `git branch | grep {runid}` shows all 5 task branches + main branch
+- [ ] `git worktree list` shows only `{runid}-main` after completion
+- [ ] `gs log short` shows 5 commits in linear order
+- [ ] `git log --oneline --graph --all` shows no branching structure
+
+## Evidence of FAIL
+
+### Phase Transitions Broken
+- [ ] Phase 2 worktrees created from `{runid}-main` instead of Phase 1's branch
+- [ ] Phase 2 tasks missing Phase 1's database commit in history
+- [ ] Phase 3 branch stacks on Phase 1, skipping Phase 2 entirely
+- [ ] Base branch detection returns wrong branch (e.g., `main` instead of task branch)
+
+### Branches Don't Inherit Properly
+- [ ] `git log {runid}-task-2-1-user-auth` missing Phase 1 database commit
+- [ ] Phase 2 tasks have different base commits (not all from same Phase 1 branch)
+- [ ] Phase 3 task missing Phase 2 feature commits in history
+- [ ] Commit counts differ between parallel branches (should be identical base + 1)
+
+### Stack Becomes Non-Linear
+- [ ] `gs ls` shows branching structure:
+  ```
+  └─□ {runid}-task-1-1-database-schema
+     ├─□ {runid}-task-2-1-user-auth        ← All branch from Phase 1
+     ├─□ {runid}-task-2-2-api-endpoints
+     └─□ {runid}-task-2-3-frontend-ui
+  ```
+- [ ] Phase 2 tasks not stacked linearly (all branch directly from Phase 1)
+- [ ] Phase 3 branch orphaned or on wrong base
+- [ ] `gs log short` shows non-linear history
+
+### Worktree State Inconsistent
+- [ ] Main worktree removed during Phase 2 cleanup
+- [ ] Main worktree left on wrong branch after Phase 2 (e.g., Phase 1 branch)
+- [ ] Parallel worktrees not cleaned up (4 worktrees after completion)
+- [ ] Orphaned worktrees in `.worktrees/` directory
+
+### Verification Commands Fail
+- [ ] `git worktree list` shows missing or extra worktrees
+- [ ] `gs ls` shows branching or orphaned branches
+- [ ] Branch count mismatch (missing or extra branches)
+- [ ] Commits not in linear order
 
 ## Failure Modes to Test
 
