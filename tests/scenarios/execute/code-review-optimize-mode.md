@@ -1,3 +1,11 @@
+---
+id: code-review-optimize-mode
+type: integration
+severity: major
+duration: 3m
+tags: [code-review, optimization, review-frequency]
+---
+
 # Test Scenario: Code Review Optimize Mode
 
 ## Context
@@ -399,3 +407,120 @@ Same logic with addition of "3+ parallel tasks (coordination complexity)" to hig
 
 - **code-review-binary-enforcement.md** - Verifies review parsing when triggered
 - **mixed-sequential-parallel-phases.md** - Tests cross-phase review decisions
+
+## Verification Commands
+
+### Check REVIEW_FREQUENCY Logic Implementation
+
+```bash
+# Verify optimize mode is documented in sequential phase skill
+grep -A 20 "REVIEW_FREQUENCY.*optimize" /Users/drewritter/projects/spectacular/skills/executing-sequential-phase/SKILL.md
+
+# Verify optimize mode is documented in parallel phase skill
+grep -A 20 "REVIEW_FREQUENCY.*optimize" /Users/drewritter/projects/spectacular/skills/executing-parallel-phase/SKILL.md
+```
+
+### Check High-Risk Indicator Lists
+
+```bash
+# Check sequential phase high-risk indicators
+grep -A 15 "High-risk indicators" /Users/drewritter/projects/spectacular/skills/executing-sequential-phase/SKILL.md
+
+# Check parallel phase high-risk indicators
+grep -A 15 "High-risk indicators" /Users/drewritter/projects/spectacular/skills/executing-parallel-phase/SKILL.md
+```
+
+### Check Low-Risk Indicator Lists
+
+```bash
+# Check sequential phase low-risk indicators
+grep -A 10 "Low-risk indicators" /Users/drewritter/projects/spectacular/skills/executing-sequential-phase/SKILL.md
+
+# Check parallel phase low-risk indicators
+grep -A 10 "Low-risk indicators" /Users/drewritter/projects/spectacular/skills/executing-parallel-phase/SKILL.md
+```
+
+### Check Decision Logic Consistency
+
+```bash
+# Verify decision logic in sequential phase skill (Step 4)
+sed -n '/^## Step 4:/,/^## Step 5:/p' /Users/drewritter/projects/spectacular/skills/executing-sequential-phase/SKILL.md | grep -A 30 "REVIEW_FREQUENCY.*optimize"
+
+# Verify decision logic in parallel phase skill (Step 8)
+sed -n '/^## Step 8:/,/^## Step 9:/p' /Users/drewritter/projects/spectacular/skills/executing-parallel-phase/SKILL.md | grep -A 30 "REVIEW_FREQUENCY.*optimize"
+```
+
+### Check for Reasoning Requirements
+
+```bash
+# Verify both skills require reasoning when skipping
+grep -B 2 -A 2 "Skip review with reasoning" /Users/drewritter/projects/spectacular/skills/executing-sequential-phase/SKILL.md
+grep -B 2 -A 2 "Skip review with reasoning" /Users/drewritter/projects/spectacular/skills/executing-parallel-phase/SKILL.md
+```
+
+## Evidence of PASS
+
+**Optimize mode is implemented:**
+- ✅ Both `executing-sequential-phase` and `executing-parallel-phase` document optimize mode in their code review steps
+- ✅ High-risk indicator lists include: schema changes, auth logic, external APIs, foundation phases (1-2), 3+ parallel tasks, security-sensitive code, complex business logic, cross-layer changes
+- ✅ Low-risk indicator lists include: pure UI components, documentation updates, test additions, refactoring with coverage, isolated utilities, non-security config
+- ✅ Decision algorithm uses ANY high-risk indicator → REVIEW, ONLY low-risk indicators → SKIP
+
+**Risk assessment logic is correct:**
+- ✅ Foundation phases (Phase 1-2) always trigger review
+- ✅ Schema/migration changes always trigger review
+- ✅ Authentication/authorization logic always triggers review
+- ✅ External API integrations always trigger review
+- ✅ 3+ parallel tasks trigger review (coordination complexity)
+- ✅ Security-sensitive code triggers review
+
+**Low-risk phases are correctly skipped:**
+- ✅ Pure UI components (no state/logic) skip review
+- ✅ Documentation-only changes skip review
+- ✅ Isolated utilities (<3 parallel) skip review
+- ✅ Test additions without implementation changes skip review
+- ✅ Refactoring with existing coverage skips review
+
+**Transparency and auditability:**
+- ✅ Skipped reviews announce "optimize mode"
+- ✅ Skipped reviews provide reasoning (e.g., "isolated UI components with no state management")
+- ✅ Triggered reviews explain which risk indicator was detected
+- ✅ Decision is visible in orchestrator output
+
+**Consistency across skills:**
+- ✅ `executing-sequential-phase` and `executing-parallel-phase` use identical high-risk indicators
+- ✅ Both skills use identical low-risk indicators
+- ✅ Both skills require reasoning when skipping review
+- ✅ Parallel phase adds "3+ parallel tasks" to high-risk indicators (appropriate for coordination complexity)
+
+## Evidence of FAIL
+
+**No optimize mode implementation:**
+- ❌ `executing-sequential-phase` or `executing-parallel-phase` don't mention "optimize" mode
+- ❌ No decision logic for analyzing phase risk
+- ❌ All phases trigger review regardless of content (optimize = per-phase)
+- ❌ All phases skip review regardless of content (optimize = end-only)
+
+**Incomplete risk assessment:**
+- ❌ High-risk indicator list missing critical items (schema, auth, APIs, foundation phases)
+- ❌ No detection of security-sensitive code
+- ❌ No special handling for foundation phases (Phase 1-2)
+- ❌ Parallel phase doesn't consider task count for coordination complexity
+
+**Incorrect skip behavior:**
+- ❌ Schema changes skip review (critical failure)
+- ❌ Auth logic skips review (critical failure)
+- ❌ External API integrations skip review (critical failure)
+- ❌ Foundation phases skip review (critical failure)
+
+**Missing transparency:**
+- ❌ Skipped reviews don't announce "optimize mode"
+- ❌ Skipped reviews provide no reasoning
+- ❌ Triggered reviews don't explain which indicator was detected
+- ❌ Decision is opaque (no output showing risk analysis)
+
+**Inconsistent implementation:**
+- ❌ `executing-sequential-phase` and `executing-parallel-phase` have different high-risk indicators
+- ❌ Skills have different low-risk indicators
+- ❌ One skill requires reasoning, the other doesn't
+- ❌ Decision logic differs between sequential and parallel execution
