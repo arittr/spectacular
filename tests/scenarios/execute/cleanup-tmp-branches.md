@@ -1,3 +1,12 @@
+---
+id: cleanup-tmp-branches
+type: integration
+severity: major
+duration: 3m
+tags: [cleanup, branches, worktrees, obsolete]
+status: obsolete
+---
+
 # Test Scenario: Cleanup Temporary Branches
 
 ## ⚠️ SCENARIO OBSOLETE
@@ -321,3 +330,182 @@ If temporary branches somehow get created:
 - Log warning that prevention failed
 
 **Long-term goal: Make cleanup unnecessary by fixing worktree creation pattern.**
+
+---
+
+## Verification Commands
+
+Run these commands after parallel phase execution to verify cleanup behavior:
+
+```bash
+# 1. Check for any temporary branches with -tmp suffix
+git branch | grep -- "-tmp$"
+# Expected (PASS): Empty output (no temporary branches)
+# Expected (FAIL): Shows branches like {runid}-task-1-tmp, {runid}-task-2-tmp
+
+# 2. List all branches for this run to verify real branches exist
+RUNID="your-run-id"  # Replace with actual run ID
+git branch | grep "^  ${RUNID}-task-"
+# Expected (PASS): Shows only real task branches (e.g., {runid}-task-2-1-database-schema)
+# Expected (FAIL): Shows mix of real branches and -tmp branches
+
+# 3. Count temporary branches to confirm none exist
+git branch | grep -c -- "-tmp$"
+# Expected (PASS): 0
+# Expected (FAIL): 3 (or number of parallel tasks)
+
+# 4. Verify all real task branches are accessible
+git branch | grep "${RUNID}-task-2-" | while read -r branch; do
+  branch=$(echo "$branch" | tr -d ' *')
+  git log --oneline "$branch" -1 || echo "ERROR: Branch $branch not accessible"
+done
+# Expected (PASS): Shows commit for each real branch
+# Expected (FAIL): Errors or missing commits
+
+# 5. Check worktree list for any stale temporary branches
+git worktree list | grep -- "-tmp"
+# Expected (PASS): Empty output
+# Expected (FAIL): Shows worktrees still checked out to temporary branches
+
+# 6. Verify git-spice stack shows clean structure
+gs ls | grep -- "-tmp"
+# Expected (PASS): Empty output (no temporary branches in stack)
+# Expected (FAIL): Shows temporary branches in stack structure
+
+# 7. Confirm cleanup didn't delete wrong branches
+git branch | grep "${RUNID}-task-2-[1-9]-" | wc -l
+# Expected (PASS): Number matches parallel task count
+# Expected (FAIL): Less than expected (cleanup deleted real branches)
+```
+
+---
+
+## Evidence of PASS
+
+If cleanup logic works correctly (or temporary branches never created), you'll see:
+
+**1. No temporary branches exist:**
+```bash
+$ git branch | grep -- "-tmp$"
+# (empty output)
+
+$ git branch | grep -c -- "-tmp$"
+0
+```
+
+**2. All real task branches present and accessible:**
+```bash
+$ git branch | grep "abc123-task-2-"
+  abc123-task-2-1-database-schema
+  abc123-task-2-2-api-endpoints
+  abc123-task-2-3-ui-components
+
+$ git log --oneline abc123-task-2-1-database-schema -1
+a1b2c3d feat: implement database schema
+```
+
+**3. Clean git-spice stack:**
+```bash
+$ gs ls
+◆ abc123-main
+├─□ abc123-task-2-1-database-schema
+├─□ abc123-task-2-2-api-endpoints
+└─□ abc123-task-2-3-ui-components
+# (no -tmp branches visible)
+```
+
+**4. No worktrees checked out to temporary branches:**
+```bash
+$ git worktree list | grep -- "-tmp"
+# (empty output)
+```
+
+**5. Correct branch count:**
+```bash
+$ git branch | grep "abc123-task-2-[1-9]-" | wc -l
+3
+# Matches number of parallel tasks
+```
+
+**6. Clean removal of all temporary artifacts:**
+```bash
+$ git branch --list "*-tmp"
+# (empty output)
+
+$ git worktree list
+/Users/user/project         abc123-main
+# (no temporary worktrees listed)
+```
+
+---
+
+## Evidence of FAIL
+
+If cleanup logic fails or wasn't run, you'll see:
+
+**1. Temporary branches still exist:**
+```bash
+$ git branch | grep -- "-tmp$"
+  abc123-task-1-tmp
+  abc123-task-2-tmp
+  abc123-task-3-tmp
+
+$ git branch | grep -c -- "-tmp$"
+3
+# Should be 0
+```
+
+**2. Polluted git-spice stack:**
+```bash
+$ gs ls
+◆ abc123-main
+├─□ abc123-task-2-1-database-schema
+├─□ abc123-task-2-1-tmp              # ❌ Should be deleted
+├─□ abc123-task-2-2-api-endpoints
+├─□ abc123-task-2-2-tmp              # ❌ Should be deleted
+├─□ abc123-task-2-3-ui-components
+└─□ abc123-task-2-3-tmp              # ❌ Should be deleted
+```
+
+**3. Worktrees still reference temporary branches:**
+```bash
+$ git worktree list
+/Users/user/project                    abc123-main
+/Users/user/project/.worktrees/abc123-task-1  abc123-task-1-tmp  # ❌ Should be detached or removed
+```
+
+**4. Cleanup deleted wrong branches:**
+```bash
+$ git branch | grep "abc123-task-2-"
+  abc123-task-2-tmp
+  abc123-task-2-tmp
+  abc123-task-2-tmp
+# ❌ Real branches gone, tmp branches remain
+
+$ git log --oneline abc123-task-2-1-database-schema -1
+fatal: ambiguous argument 'abc123-task-2-1-database-schema': unknown revision
+# ❌ Real branch was deleted
+```
+
+**5. Incomplete cleanup:**
+```bash
+$ git branch | grep -- "-tmp$"
+  abc123-task-2-tmp
+  abc123-task-3-tmp
+# ❌ Some but not all temporary branches remain
+
+$ git branch | grep "abc123-task-2-[1-9]-" | wc -l
+2
+# ❌ Expected 3, one real branch was deleted
+```
+
+**6. Stale worktree associations:**
+```bash
+$ git worktree list | grep -- "-tmp" | wc -l
+3
+# ❌ Should be 0, worktrees still checked out to temporary branches
+
+$ git branch -d abc123-task-1-tmp
+error: Cannot delete branch 'abc123-task-1-tmp' checked out at '/Users/user/project/.worktrees/abc123-task-1'
+# ❌ Can't delete because worktree association not cleaned up
+```
