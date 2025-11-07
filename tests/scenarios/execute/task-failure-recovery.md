@@ -1,3 +1,11 @@
+---
+id: task-failure-recovery
+type: integration
+severity: critical
+duration: 5m
+tags: [error-handling, recovery, failure, worktrees, parallel-execution]
+---
+
 # Test Scenario: Task Failure Recovery
 
 ## Context
@@ -271,3 +279,125 @@ ls .worktrees/
 - **sequential-stacking.md** - Tests error handling in sequential phases
 - **quality-check-failure.md** - Tests specific quality check failures
 - **resume-after-crash.md** - Tests resume after orchestrator crash (not just task failure)
+
+## Verification Commands
+
+### Check Error Handling Implementation
+
+```bash
+# Verify execute command has failure detection logic
+grep -A 10 "TASK_.*_STATUS" commands/execute.md
+
+# Verify error reporting includes task details
+grep -A 5 "failed" commands/execute.md | grep -i "task\|error\|next steps"
+
+# Verify cleanup is conditional on success
+grep -B 5 -A 5 "worktree remove\|rm -rf.*worktrees" commands/execute.md
+```
+
+### Check Recovery Logic
+
+```bash
+# Verify Step 0c checks for existing branches
+grep -A 20 "Step 0c" commands/execute.md | grep "git branch\|grep.*runid"
+
+# Verify resume skips completed tasks
+grep -A 10 "resume\|existing.*branch" commands/execute.md | grep -i "skip\|already"
+
+# Verify stacking waits for all tasks
+grep -B 5 "stacking\|upstack" commands/execute.md | grep -i "all.*complete\|check.*status"
+```
+
+### Check Worktree State After Failure
+
+```bash
+# List all worktrees (should include failed task)
+git worktree list | grep "{runid}"
+
+# Check failed task worktree still exists
+ls -la .worktrees/{runid}-task-2
+
+# Verify successful task branches exist
+git branch | grep "{runid}-task-2-1\|{runid}-task-2-3"
+
+# Verify failed task has no branch yet
+git branch | grep "{runid}-task-2-2" || echo "Task 2 branch not created (expected)"
+```
+
+## Evidence of PASS
+
+### Error Detection
+- ✅ Orchestrator stops execution immediately when task failure detected
+- ✅ Exit code is non-zero (1) indicating failure
+- ✅ Error output clearly identifies failed task by phase and number
+- ✅ Error message includes specific failure reason from subagent
+
+### State Preservation
+- ✅ Successful task branches (`{runid}-task-2-1`, `{runid}-task-2-3`) exist in git
+- ✅ Failed task worktree (`.worktrees/{runid}-task-2`) preserved with partial changes
+- ✅ Successful task worktrees preserved in detached HEAD state
+- ✅ `{runid}-main` branch untouched (no corruption)
+- ✅ No stacking attempted (git log shows no upstack relationships)
+
+### Error Reporting Quality
+- ✅ Output shows "✅ Task 1 - {name}" and "✅ Task 3 - {name}" as completed
+- ✅ Output shows "❌ Task 2 - {name}" as failed with error details
+- ✅ Provides actionable next steps: "Fix in .worktrees/{runid}-task-2, then re-run"
+- ✅ Includes full error output from quality check or implementation failure
+
+### Resume Capability
+- ✅ After manual fix and branch creation, re-running `/spectacular:execute` detects existing branches
+- ✅ Output shows "Resuming from partial completion..."
+- ✅ Skips worktree creation for tasks 1, 2, and 3 (all branches exist)
+- ✅ Proceeds directly to stacking step
+- ✅ No duplicate work or re-execution of successful tasks
+
+### Post-Resume State
+- ✅ After successful stacking, all worktrees cleaned up (`git worktree list` shows only main worktree)
+- ✅ All task branches accessible (`git branch` shows all three)
+- ✅ Linear stack created: `task-2-1 → task-2-2 → task-2-3`
+- ✅ `gs log short` shows correct dependency chain
+
+### Resource Management
+- ✅ No orphaned worktrees in `.git/worktrees/`
+- ✅ No stale worktree references (`git worktree prune` reports nothing)
+- ✅ `.worktrees/` directory clean after successful resume
+
+## Evidence of FAIL
+
+### Error Detection Failures
+- ❌ Execution continues to stacking despite task failure
+- ❌ Exit code is 0 (success) when task failed
+- ❌ Error output doesn't identify which task failed
+- ❌ Error message is generic: "Something went wrong" without details
+
+### State Corruption
+- ❌ Successful task branches missing or deleted
+- ❌ Failed task worktree cleaned up (can't debug)
+- ❌ `{runid}-main` branch modified (contains partial changes from failed task)
+- ❌ Stacking attempted with incomplete tasks (git log shows partial upstack)
+
+### Error Reporting Issues
+- ❌ No indication of which tasks succeeded
+- ❌ Failure message doesn't specify task number/name
+- ❌ No next steps provided for recovery
+- ❌ Error details from subagent not surfaced to user
+- ❌ Failed task worktree path not mentioned
+
+### Resume Failures
+- ❌ Re-running execute re-executes successful tasks (duplicates work)
+- ❌ Step 0c doesn't detect existing branches
+- ❌ Resume creates new worktrees for already-completed tasks
+- ❌ Git log shows duplicate commits with same message
+
+### Post-Resume Issues
+- ❌ Worktrees not cleaned up (`.worktrees/` still has directories)
+- ❌ `git worktree list` shows orphaned worktrees
+- ❌ Stacking failed (branches not in linear chain)
+- ❌ `gs log short` shows incorrect or missing dependencies
+
+### Resource Leaks
+- ❌ `.git/worktrees/` contains stale entries
+- ❌ `git worktree prune` removes orphaned references
+- ❌ `.worktrees/` directory not empty after completion
+- ❌ Disk space consumed by abandoned worktrees

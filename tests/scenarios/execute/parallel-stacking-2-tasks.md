@@ -1,3 +1,11 @@
+---
+id: parallel-stacking-2-tasks
+type: integration
+severity: major
+duration: 3m
+tags: [parallel-execution, git-stacking, git-spice, worktrees]
+---
+
 # Test Scenario: Parallel Stacking (2 Tasks)
 
 ## Context
@@ -155,6 +163,130 @@ git status  # Should show "HEAD detached at <commit>"
 - [ ] Branches remain accessible in main repo
 - [ ] No temporary files/branches left behind
 
+## Verification Commands
+
+### Check Stacking Logic Implementation
+
+Verify the execute command uses N-1 pattern for upstack operations:
+
+```bash
+# Search for stacking logic in execute command
+cd /Users/drewritter/projects/spectacular
+grep -n "upstack" commands/execute.md
+
+# Look for N-1 pattern (for N=2 tasks, should be 1 upstack operation)
+grep -A5 -B5 "task 2 through N" commands/execute.md
+```
+
+**Expected:** Stacking logic should iterate from task 2 through N, calling `gs upstack onto` for each (N-1 operations total).
+
+### Verify Stack Structure
+
+After execution completes, verify linear stack was created:
+
+```bash
+# Check stack topology
+gs ls
+
+# Verify all task branches exist
+git branch | grep "{runid}-task-2-"
+
+# Count upstack operations in logs (should be 1 for 2 tasks)
+# Implementation subagents should show gs upstack commands
+```
+
+## Evidence of PASS
+
+### Correct Stacking Operations
+
+For N=2 parallel tasks, orchestrator should perform exactly **1 upstack operation**:
+
+```bash
+# Orchestrator output shows:
+cd .worktrees/{runid}-main
+
+# Task 1: Track only (base of stack)
+git checkout {runid}-task-2-1-{name}
+gs branch track
+
+# Task 2: Track + upstack (N-1 = 1 upstack)
+git checkout {runid}-task-2-2-{name}
+gs branch track
+gs upstack onto {runid}-task-2-1-{name}
+```
+
+### Linear Chain Created
+
+```bash
+gs ls output shows:
+main
+└─□ {runid}-task-1-1-{name}       # Phase 1
+   └─□ {runid}-task-2-1-{name}     # Phase 2, task 1 (base)
+      └─□ {runid}-task-2-2-{name}  # Phase 2, task 2 (stacked on task 1)
+```
+
+### Clean Execution
+
+- No retry attempts for stacking operations
+- No temporary branches left behind
+- Worktrees cleaned up successfully
+- All branches accessible from main repo
+
+## Evidence of FAIL
+
+### Wrong Number of Upstack Operations
+
+```bash
+# FAIL: Zero upstack operations (both tasks tracked but not stacked)
+gs ls shows:
+main
+└─□ {runid}-task-1-1-{name}
+   ├─□ {runid}-task-2-1-{name}     # Both branch from same base
+   └─□ {runid}-task-2-2-{name}     # Not stacked linearly
+
+# FAIL: Two upstack operations (N instead of N-1)
+# Error: Task 1 has no previous task to stack onto
+fatal: branch '{runid}-task-2-0-{name}' not found
+```
+
+### Non-Linear Stack
+
+```bash
+# FAIL: Orphaned branches (not in stack)
+gs ls shows:
+main
+└─□ {runid}-task-1-1-{name}
+   └─□ {runid}-task-2-1-{name}
+
+# Task 2-2 exists but not shown (orphaned):
+git branch | grep task-2-2
+  {runid}-task-2-2-{name}
+```
+
+### Stacking Failed with Errors
+
+```bash
+# FAIL: Context errors
+fatal: cannot change to '.worktrees/{runid}-main': No such file or directory
+
+# FAIL: Branch not found errors
+error: pathspec '{runid}-task-2-1-{name}' did not match any file(s) known to git
+
+# FAIL: Worktree cleanup blocked
+fatal: '{runid}-task-2-2-{name}' is checked out at '.worktrees/{runid}-task-2'
+# (Missing HEAD detachment in implementation subagent)
+```
+
+### Retry/Experimentation Detected
+
+```bash
+# FAIL: Multiple attempts at stacking (should complete in one attempt)
+# Orchestrator logs show:
+Attempt 1: gs upstack onto {runid}-task-2-1-{name} [FAILED]
+Retrying with different approach...
+Attempt 2: git rebase {runid}-task-2-1-{name} [FAILED]
+```
+
 ## Test Execution
 
 **Using:** `testing-workflows-with-subagents` skill from spectacular
@@ -172,6 +304,7 @@ git status  # Should show "HEAD detached at <commit>"
 gs ls  # Verify linear stack structure
 git branch | grep -c -- "-tmp$"  # Should be 0
 git worktree list  # Should only show main repo
+git log --oneline --graph --all  # Verify commit relationships
 ```
 
 ## Related Scenarios

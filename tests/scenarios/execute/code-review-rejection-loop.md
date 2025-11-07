@@ -1,3 +1,12 @@
+---
+id: code-review-rejection-loop
+type: integration
+severity: critical
+estimated_duration: 5m
+requires_git_repo: false
+tags: [code-review, autonomous-execution, fix-loop, iteration-tracking]
+---
+
 # Test Scenario: Code Review Rejection Loop with Automatic Fixes
 
 ## Context
@@ -201,6 +210,61 @@ Ready to merge? Yes
 - [ ] Handles rejection on second review (fix wasn't sufficient)
 - [ ] Handles approval on first review (no fixes needed)
 - [ ] Handles 3+ rejection cycles without confusion
+
+## Verification Commands
+
+```bash
+# Check sequential phase for autonomous fix dispatch
+grep -n "Dispatch fix subagent" skills/executing-sequential-phase/SKILL.md
+grep -n "DO NOT ask user" skills/executing-sequential-phase/SKILL.md
+grep -n "Re-reviewing" skills/executing-sequential-phase/SKILL.md
+grep -n "REJECTION_COUNT" skills/executing-sequential-phase/SKILL.md
+
+# Check parallel phase for same requirements
+grep -n "Dispatch fix subagent" skills/executing-parallel-phase/SKILL.md
+grep -n "DO NOT ask user" skills/executing-parallel-phase/SKILL.md
+grep -n "Re-reviewing" skills/executing-parallel-phase/SKILL.md
+grep -n "REJECTION_COUNT" skills/executing-parallel-phase/SKILL.md
+
+# Verify escalation logic exists
+grep -n "REJECTION_COUNT.*>.*3" skills/executing-sequential-phase/SKILL.md
+grep -n "REJECTION_COUNT.*>.*3" skills/executing-parallel-phase/SKILL.md
+```
+
+## Evidence of PASS
+
+### Sequential Phase
+- [ ] Line X in `skills/executing-sequential-phase/SKILL.md` contains: "Dispatch fix subagent to address all identified issues"
+- [ ] Line Y contains: "DO NOT ask user what to do - autonomous fixing is expected"
+- [ ] Line Z contains: "Re-reviewing Phase" (automatic re-review after fixes)
+- [ ] REJECTION_COUNT variable implemented for iteration tracking
+- [ ] Escalation check exists: `if [ $REJECTION_COUNT -gt 3 ]`
+- [ ] NO lines contain: "or report to user"
+- [ ] NO lines contain: "Would you like me to"
+- [ ] NO lines contain: "Should I"
+
+### Parallel Phase
+- [ ] Same requirements met in `skills/executing-parallel-phase/SKILL.md`
+- [ ] All autonomous dispatch and iteration tracking present
+- [ ] Escalation logic identical to sequential phase
+
+### Fix Subagent Prompt
+- [ ] Both skills include fix subagent prompt template
+- [ ] Prompt includes spec anchoring (CONTEXT FOR FIXES section)
+- [ ] Prompt instructs reading constitution and spec before fixes
+- [ ] Prompt lists all issues with file locations
+- [ ] Prompt specifies working in correct worktree/branch
+
+## Evidence of FAIL
+
+- [ ] Missing "Dispatch fix subagent" instruction in either skill
+- [ ] Contains ambiguous wording: "or report to user"
+- [ ] Contains user prompting: "Would you like me to", "Should I"
+- [ ] Missing automatic re-review instruction
+- [ ] Missing REJECTION_COUNT iteration tracking
+- [ ] Missing escalation check after 3 rejections
+- [ ] Fix subagent prompt missing spec anchoring
+- [ ] Verification commands fail or return no matches
 
 ## Anti-Patterns to Detect
 

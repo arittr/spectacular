@@ -1,3 +1,12 @@
+---
+id: parallel-stacking-4-tasks
+type: integration
+severity: major
+estimated_duration: 5m
+requires_git_repo: false
+tags: [parallel-execution, git-stacking, git-spice, worktrees]
+---
+
 # Test Scenario: Parallel Stacking (4 Tasks)
 
 ## Context
@@ -173,6 +182,63 @@ du -sh .worktrees/*  # Should be small if dependencies not installed
 - [ ] Test passes consistently (not flaky)
 - [ ] Same command sequence works on re-run
 - [ ] No manual intervention required
+
+## Verification Commands
+
+```bash
+# Verify stacking logic in parallel phase skill
+grep -A 30 "Step 5: Stack Branches" skills/executing-parallel-phase/SKILL.md
+
+# Check for N-1 upstack pattern
+grep -n "upstack onto" skills/executing-parallel-phase/SKILL.md
+
+# Verify cleanup logic
+grep -A 20 "Step 7: Cleanup" skills/executing-parallel-phase/SKILL.md
+
+# Check worktree creation pattern
+grep -n "git worktree add" skills/executing-parallel-phase/SKILL.md
+
+# Verify HEAD detach instruction for subagents
+grep -A 10 "git switch --detach" skills/executing-parallel-phase/SKILL.md
+```
+
+## Evidence of PASS
+
+### Stacking Implementation
+- [ ] Parallel phase skill documents Step 5: Stack Branches
+- [ ] Stacking uses iterative pattern: first track, rest upstack onto previous
+- [ ] Formula documented: N-1 upstack operations for N tasks
+- [ ] Example shows: 4 tasks = 3 upstack operations
+- [ ] Verification command after stacking: `gs ls` or `gs log short`
+
+### Worktree Management
+- [ ] Worktree creation: `git worktree add .worktrees/{runid}-task-{id} {base-branch}`
+- [ ] All worktrees branch from same base (parallel phase base branch)
+- [ ] Subagent instructions include: `git switch --detach` after branch creation
+- [ ] Cleanup removes all worktrees: `git worktree remove .worktrees/{runid}-task-*`
+
+### Scalability
+- [ ] No hardcoded limits on task count
+- [ ] Stacking pattern works for any N > 0
+- [ ] No special cases for N=4 specifically
+- [ ] Documentation shows generalized approach
+
+### Correctness
+- [ ] Final structure is linear chain (not tree)
+- [ ] Branches stack in order: task-1 → task-2 → task-3 → task-4
+- [ ] No temporary or experimental branches created
+- [ ] All branches accessible after stacking
+
+## Evidence of FAIL
+
+- [ ] Missing Step 5: Stack Branches in parallel phase skill
+- [ ] Stacking uses O(N²) pattern (nested loops)
+- [ ] No N-1 formula documented
+- [ ] Hardcoded for specific task counts
+- [ ] Subagents missing `git switch --detach` instruction
+- [ ] Cleanup incomplete or manual
+- [ ] Verification commands fail or return no matches
+- [ ] Non-linear stacking (tree instead of chain)
 
 ## Test Execution
 

@@ -1,3 +1,11 @@
+---
+id: parallel-stacking-3-tasks
+type: integration
+severity: major
+duration: 4m
+tags: [parallel-execution, git-stacking, git-spice, worktree-management]
+---
+
 # Test Scenario: Parallel Stacking (3 Tasks)
 
 ## Context
@@ -235,6 +243,169 @@ git worktree list  # Should show only main repo
 # Branches accessible
 git log --oneline {runid}-task-2-3-{name}  # Should show commits
 ```
+
+## Verification Commands
+
+### Grep for Stacking Logic
+
+**Location to check:** Orchestrator's stacking operation logs
+
+**Pattern:** Count `gs upstack onto` commands in execution logs
+```bash
+# For N=3 parallel tasks, expect N-1=2 upstack operations
+grep -c "gs upstack onto" execution.log
+# Expected: 2
+```
+
+**What to verify:**
+- Exactly 2 `gs upstack onto` commands executed (N-1 pattern for N=3)
+- No duplicate/retry attempts (would show count > 2)
+- Commands executed in sequence (task-2 onto task-1, then task-3 onto task-2)
+
+### Verify Linear Chain Created
+
+**Check stack structure:**
+```bash
+gs ls
+# Expected output pattern:
+# main
+# └─□ {runid}-task-1-1-{name}
+#    └─□ {runid}-task-2-1-{name}
+#       └─□ {runid}-task-2-2-{name}
+#          └─□ {runid}-task-2-3-{name}
+```
+
+**Automated verification:**
+```bash
+# Count branches in runid namespace
+git branch | grep "^  ${runid}-" | wc -l
+# Expected: 4 (1 sequential + 3 parallel)
+
+# Verify no orphaned parallel branches
+gs ls --format=json | jq '.[] | select(.name | startswith("'${runid}'-task-2-")) | .parent'
+# All Phase 2 tasks should have parent set (no nulls except first)
+```
+
+### Verify Correct Ordering
+
+**Check commit ancestry:**
+```bash
+# Task 2-3 should be descendant of task 2-2
+git merge-base --is-ancestor ${runid}-task-2-2-{name} ${runid}-task-2-3-{name}
+# Exit code 0 = success
+
+# Task 2-2 should be descendant of task 2-1
+git merge-base --is-ancestor ${runid}-task-2-1-{name} ${runid}-task-2-2-{name}
+# Exit code 0 = success
+
+# Task 2-1 should be descendant of task 1-1 (sequential base)
+git merge-base --is-ancestor ${runid}-task-1-1-{name} ${runid}-task-2-1-{name}
+# Exit code 0 = success
+```
+
+## Evidence of PASS
+
+### Stacking Operations
+- **Execution log shows exactly 2 `gs upstack onto` commands**
+  ```
+  [orchestrator] git checkout {runid}-task-2-2-{name}
+  [orchestrator] gs upstack onto {runid}-task-2-1-{name}
+  [orchestrator] git checkout {runid}-task-2-3-{name}
+  [orchestrator] gs upstack onto {runid}-task-2-2-{name}
+  ```
+
+- **No retry attempts or experimental commands**
+  - No multiple `gs branch track` calls for same branch
+  - No failed `gs upstack onto` followed by different approach
+  - Total stacking time < 30 seconds
+
+### Linear Chain Structure
+- **`gs ls` shows perfect 4-branch linear chain**
+  ```
+  main → task-1-1 → task-2-1 → task-2-2 → task-2-3
+  ```
+
+- **No orphaned branches** (all parallel tasks connected to sequential base)
+- **Correct parent relationships** verified with `git merge-base --is-ancestor`
+
+### Correctness Indicators
+- All 4 branches exist: `git branch | grep "^  ${runid}-" | wc -l` returns 4
+- Zero temporary branches: `git branch | grep -- "-tmp$"` returns empty
+- Each branch has expected commit content (verify with `git log --oneline`)
+- Worktrees cleaned up: `git worktree list` shows only main repo
+
+## Evidence of FAIL
+
+### Wrong Number of Upstack Operations
+- **More than 2 `gs upstack onto` commands** = retry/experimentation
+  ```
+  # FAIL: Multiple attempts visible
+  grep -c "gs upstack onto" execution.log
+  # Output: 5 (should be 2)
+  ```
+
+- **Less than 2 `gs upstack onto` commands** = incomplete stacking
+  ```
+  # FAIL: Only one upstack operation
+  grep -c "gs upstack onto" execution.log
+  # Output: 1 (should be 2)
+  ```
+
+### Non-Linear Stack
+- **`gs ls` shows parallel branches not in linear chain**
+  ```
+  # FAIL: Tasks branching from different points
+  main
+  ├─□ {runid}-task-2-1-{name}
+  ├─□ {runid}-task-2-2-{name}  # Should be child of task-2-1, not main
+  └─□ {runid}-task-2-3-{name}  # Should be child of task-2-2
+  ```
+
+- **Orphaned branches** (parallel task not descended from sequential base)
+  ```bash
+  # FAIL: Task 2-1 not descended from task 1-1
+  git merge-base --is-ancestor ${runid}-task-1-1-{name} ${runid}-task-2-1-{name}
+  # Exit code 1 (not ancestor)
+  ```
+
+### Ordering Incorrect
+- **Parallel tasks stacked in wrong order** (e.g., task-3 → task-1 → task-2)
+  ```bash
+  # FAIL: Task 2-2 is ancestor of task 2-3 (reversed)
+  git merge-base --is-ancestor ${runid}-task-2-3-{name} ${runid}-task-2-2-{name}
+  # Exit code 0 (should be opposite relationship)
+  ```
+
+- **Parallel tasks not stacked in task number order**
+  - Expected: task-2-1 → task-2-2 → task-2-3
+  - FAIL: task-2-3 → task-2-1 → task-2-2 (wrong ordering)
+
+### Temporary Branch Pollution
+- **Temporary branches exist in final stack**
+  ```bash
+  # FAIL: Temporary branches not cleaned up
+  git branch | grep -- "-tmp$"
+  # Output: {runid}-task-2-1-tmp
+  #         {runid}-task-2-2-tmp
+  #         {runid}-task-2-3-tmp
+  ```
+
+### Path/Context Errors
+- **Execution log shows nested worktree creation attempts**
+  ```
+  [orchestrator] pwd
+  /path/to/repo/.worktrees/{runid}-main
+  [orchestrator] git worktree add .worktrees/{runid}-task-1 ...
+  fatal: cannot change to '.worktrees/{runid}-main/.worktrees/{runid}-task-1'
+  ```
+
+- **Multiple stacking attempts from wrong directory**
+  ```
+  [orchestrator] gs upstack onto ...
+  error: ...
+  [orchestrator] cd .worktrees/{runid}-main
+  [orchestrator] gs upstack onto ...  # Second attempt after path fix
+  ```
 
 ## Regression Verification
 
