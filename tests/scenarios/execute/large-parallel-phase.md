@@ -1,3 +1,11 @@
+---
+id: large-parallel-phase
+type: integration
+severity: major
+duration: 5m
+tags: [parallel-execution, scalability, performance]
+---
+
 # Test Scenario: Large Parallel Phase (10 Tasks)
 
 ## Context
@@ -315,3 +323,131 @@ time /spectacular:execute
 - **parallel-stacking-4-tasks.md** - Previous largest test (N=4)
 - **single-task-parallel-phase.md** - Smallest edge case (N=1)
 - **task-failure-recovery.md** - Error handling scales to N=10
+
+## Verification Commands
+
+**Check loop-based worktree creation (scalable to N tasks):**
+
+```bash
+cd /Users/drewritter/projects/spectacular
+grep -n "for.*worktree" commands/execute.md
+grep -A5 "worktree add" commands/execute.md | grep -E "(for|while|loop)"
+```
+
+**Check array-based parallel execution:**
+
+```bash
+grep -n "parallel.*task" commands/execute.md
+grep -A10 "spawn.*subagent" commands/execute.md | grep -E "(for|array|iterate)"
+```
+
+**Check linear stacking logic (no hardcoded task counts):**
+
+```bash
+grep -n "upstack onto" commands/execute.md
+grep -B5 -A5 "upstack onto" commands/execute.md | grep -E "(for|loop|each|iterate)"
+```
+
+**Check cleanup loop (removes all worktrees):**
+
+```bash
+grep -n "worktree remove" commands/execute.md
+grep -A5 "worktree remove" commands/execute.md | grep -E "(for|while|all)"
+```
+
+**Verify no hardcoded task limits:**
+
+```bash
+grep -E "(task-[0-9]|TASK_ID=[0-9])" commands/execute.md | grep -v "example"
+grep -E "([1-9]0+|100|limit)" commands/execute.md | grep -i "task"
+```
+
+**Check scalability patterns (O(N) complexity):**
+
+```bash
+grep -n "O(N)" commands/execute.md
+grep -B3 -A3 "linear" commands/execute.md | grep -i "time\|complexity\|scale"
+```
+
+**Verify resource management:**
+
+```bash
+grep -n "cleanup\|remove\|delete" commands/execute.md
+grep -A5 "cleanup" commands/execute.md | grep -E "(all|every|complete)"
+```
+
+## Evidence of PASS
+
+**Scales to N tasks without modification:**
+- Worktree creation uses dynamic loop: `for TASK_ID in $(seq 1 $NUM_TASKS)`
+- Parallel execution iterates over task array: `for task in "${PARALLEL_TASKS[@]}"`
+- Stacking loops through all branches: `for i in $(seq 2 $NUM_TASKS)`
+- Cleanup removes all worktrees: `for worktree in .worktrees/{runid}-task-*`
+
+**No hardcoded task limits:**
+- No explicit checks for `if NUM_TASKS > 10`
+- No hardcoded task IDs (task-1, task-2, etc.) outside examples
+- No maximum task count validation that fails for N=10
+- Array operations work for any size
+
+**Linear time complexity (O(N)):**
+- Each worktree created independently (~1s per task)
+- Each stacking operation is constant time (~1.5s per upstack)
+- Total time = N × (worktree_time + stack_time + cleanup_time)
+- No nested loops that multiply by task count
+
+**Proper resource management:**
+- All worktrees created in loop are also removed in loop
+- Cleanup uses same pattern as creation (prevents orphaned worktrees)
+- No resource accumulation (memory, file handles) as N increases
+- Disk space reclaimed after cleanup (5GB → 50MB)
+
+**Performance benchmarks met:**
+- 10 worktrees created in < 10s (< 1s per worktree)
+- 9 upstack operations in < 30s (< 3s per operation)
+- 10 worktree removals in < 5s (< 0.5s per worktree)
+- Total overhead < 1 minute for N=10
+
+**Verification output shows:**
+- `git worktree list | grep "{runid}-task-" | wc -l` returns 10
+- `gs ls` shows linear chain of 10 branches
+- `git branch | grep "{runid}-task-2-"` shows all 10 task branches
+- No error messages about resource exhaustion
+
+## Evidence of FAIL
+
+**Hardcoded task limits:**
+- Command contains explicit check: `if [ $NUM_TASKS -gt 5 ]; then error "Too many tasks"; fi`
+- Worktree creation only handles tasks 1-5: `for TASK_ID in 1 2 3 4 5`
+- Stacking logic assumes exactly 3 tasks: `upstack task-2 onto task-1; upstack task-3 onto task-2`
+- Cleanup hardcoded: `git worktree remove .worktrees/{runid}-task-{1,2,3,4,5}`
+
+**Quadratic time complexity (O(N²)):**
+- Each stacking operation processes all previous tasks
+- Task 10 takes 10× longer than task 1 (30s vs 3s)
+- Total time = N × (N+1) / 2 operations
+- Stacking 10 tasks takes 5+ minutes (not 30s)
+
+**Resource exhaustion:**
+- "Out of memory" error after spawning 8 subagents
+- "Too many open files" error during worktree 9 creation
+- Disk usage exceeds 10GB and doesn't cleanup
+- Process count exceeds system limits (ulimit -u)
+
+**Incomplete cleanup:**
+- `git worktree list` shows 3 orphaned worktrees after cleanup
+- Cleanup loop exits early on first error
+- Disk usage remains at 5GB after completion
+- Manual `git worktree prune` required to recover
+
+**Performance degradation:**
+- Worktree creation slows down: task 1 (0.5s) → task 10 (5s)
+- Stacking time non-linear: tasks 1-3 (8s) → tasks 1-10 (120s)
+- Total overhead exceeds 2 minutes for N=10
+- System becomes unresponsive during parallel execution
+
+**Error messages indicate:**
+- `fatal: 'upstack' failed - stack too large`
+- `error: unable to create worktree: resource temporarily unavailable`
+- `warning: skipping cleanup for .worktrees/{runid}-task-8 (still in use)`
+- `error: branch '{runid}-task-2-7' not found in repository`

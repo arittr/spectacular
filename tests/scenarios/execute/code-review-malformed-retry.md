@@ -1,3 +1,11 @@
+---
+id: code-review-malformed-retry
+type: integration
+severity: critical
+duration: 3m
+tags: [code-review, error-handling, retry, verdict-parsing]
+---
+
 # Test Scenario: Code Review Malformed Output - Automatic Retry
 
 ## Context
@@ -223,6 +231,170 @@ Should contain:
 **Check:** `skills/executing-parallel-phase/SKILL.md` at "Step 8: Code Review"
 
 Should contain identical retry logic.
+
+## Verification Commands
+
+### Check Sequential Phase Skill Contains Retry Logic
+
+```bash
+# Verify retry logic exists in code review step
+grep -A 10 "Missing verdict.*Retry review ONCE" /Users/drewritter/projects/spectacular/skills/executing-sequential-phase/SKILL.md
+
+# Verify explicit retry count limit
+grep "retry ONCE\|max.*1.*retry\|one.*retry" /Users/drewritter/projects/spectacular/skills/executing-sequential-phase/SKILL.md
+
+# Verify anti-hallucination warning
+grep -i "DO NOT hallucinate issues" /Users/drewritter/projects/spectacular/skills/executing-sequential-phase/SKILL.md
+```
+
+### Check Parallel Phase Skill Contains Retry Logic
+
+```bash
+# Verify retry logic exists in code review step
+grep -A 10 "Missing verdict.*Retry review ONCE" /Users/drewritter/projects/spectacular/skills/executing-parallel-phase/SKILL.md
+
+# Verify explicit retry count limit
+grep "retry ONCE\|max.*1.*retry\|one.*retry" /Users/drewritter/projects/spectacular/skills/executing-parallel-phase/SKILL.md
+
+# Verify anti-hallucination warning
+grep -i "DO NOT hallucinate issues" /Users/drewritter/projects/spectacular/skills/executing-parallel-phase/SKILL.md
+```
+
+### Check Execute Command Documents Retry Behavior
+
+```bash
+# Verify execute command references retry logic
+grep -i "retry.*malformed\|malformed.*retry" /Users/drewritter/projects/spectacular/commands/execute.md
+```
+
+## Evidence of PASS
+
+### Minimal Evidence (First Attempt Malformed, Retry Succeeds)
+
+**Orchestrator output shows:**
+```
+⏺ superpowers:code-reviewer(Review Phase 1 implementation)
+  ⎿  Done (15 tool uses · 64.7k tokens · 2m 12s)
+
+⏺ Review verdict: NOT FOUND in standard format
+
+⏺ Code review output missing 'Ready to merge?' field. This may be a transient
+  issue. Retrying once...
+
+⏺ superpowers:requesting-code-review (retry attempt)
+  ⎿  Done (12 tool uses · 45.3k tokens · 1m 45s)
+
+⏺ Retry succeeded! Code review APPROVED - proceeding to Phase 2
+```
+
+**Why this is PASS:**
+- ✅ Detected malformed output from first attempt
+- ✅ Announced retry with clear reasoning
+- ✅ Dispatched code review skill again
+- ✅ Parsed verdict from retry successfully
+- ✅ Proceeded to next phase after approval
+
+### Complete Evidence (Both Attempts Malformed, Proper Failure)
+
+**Orchestrator output shows:**
+```
+⏺ superpowers:code-reviewer(Review Phase 1 implementation)
+  ⎿  Done (15 tool uses · 64.7k tokens · 2m 12s)
+
+⏺ Review verdict: NOT FOUND in standard format
+
+⏺ Code review output missing 'Ready to merge?' field. Retrying once...
+
+⏺ superpowers:requesting-code-review (retry attempt)
+  ⎿  Done (13 tool uses · 52.1k tokens · 1m 58s)
+
+⏺ ❌ Retry also produced malformed output. Both attempts failed to include verdict.
+
+⏺ First attempt output (excerpt):
+  "The implementation is solid. No blocking issues found."
+
+⏺ Retry attempt output (excerpt):
+  "Great work! The code quality is high and meets all standards."
+
+⏺ ❌ STOPPING execution - cannot determine review verdict
+⏺ Please review the code-reviewer agent output and re-run manually
+```
+
+**Why this is PASS:**
+- ✅ Detected malformed output from first attempt
+- ✅ Retried exactly once
+- ✅ Detected malformed output from retry
+- ✅ Stopped execution immediately
+- ✅ Displayed both outputs for debugging
+- ✅ Clear error message with actionable guidance
+- ✅ Did NOT proceed to next phase
+- ✅ Did NOT hallucinate issues
+
+## Evidence of FAIL
+
+### FAIL Pattern 1: No Retry Attempted
+
+**Orchestrator output shows:**
+```
+⏺ superpowers:code-reviewer(Review Phase 1 implementation)
+  ⎿  Done (15 tool uses · 64.7k tokens · 2m 12s)
+
+⏺ Review verdict: NOT FOUND in standard format
+
+⏺ The review provided comprehensive analysis but didn't include the explicit
+  "Ready to merge? Yes/No/With fixes" field. However, it clearly identified
+  a CRITICAL issue (blocking test failure) that must be fixed.
+
+⏺ Let me dispatch a fix subagent to resolve the test issue:
+```
+
+**Why this is FAIL:**
+- ❌ No retry attempted despite malformed output
+- ❌ Proceeded to interpret unstructured text
+- ❌ Hallucinated "CRITICAL issue" without valid verdict
+- ❌ Dispatched fix subagent based on hallucination
+
+### FAIL Pattern 2: Proceeds Despite Malformed Output
+
+**Orchestrator output shows:**
+```
+⏺ superpowers:code-reviewer(Review Phase 1 implementation)
+  ⎿  Done (15 tool uses · 64.7k tokens · 2m 12s)
+
+⏺ Review verdict: NOT FOUND in standard format
+
+⏺ The review seems generally positive, so proceeding to Phase 2...
+```
+
+**Why this is FAIL:**
+- ❌ No retry attempted
+- ❌ Assumed positive outcome without valid verdict
+- ❌ Proceeded without explicit "Ready to merge? Yes"
+
+### FAIL Pattern 3: Infinite Retry Loop
+
+**Orchestrator output shows:**
+```
+⏺ superpowers:code-reviewer(Review Phase 1 implementation)
+  ⎿  Done (15 tool uses · 64.7k tokens · 2m 12s)
+
+⏺ Review verdict: NOT FOUND - retrying...
+
+⏺ superpowers:requesting-code-review (retry attempt 1)
+  ⎿  Done (12 tool uses · 45.3k tokens · 1m 45s)
+
+⏺ Review verdict: NOT FOUND - retrying...
+
+⏺ superpowers:requesting-code-review (retry attempt 2)
+  ⎿  Done (11 tool uses · 43.8k tokens · 1m 38s)
+
+⏺ Review verdict: NOT FOUND - retrying...
+```
+
+**Why this is FAIL:**
+- ❌ Retry count exceeds 1
+- ❌ No failure after second malformed output
+- ❌ Wastes time and tokens on repeated failures
 
 ## Testing Method
 
