@@ -1,3 +1,12 @@
+---
+id: orchestrator-location-discipline
+type: integration
+severity: critical
+estimated_duration: 5m
+requires_git_repo: false
+tags: [orchestrator, location-discipline, worktrees, safety]
+---
+
 # Test Scenario: Orchestrator Location Discipline
 
 ## Context
@@ -227,6 +236,71 @@ grep -rn "cd .worktrees" skills/executing-sequential-phase/SKILL.md skills/execu
 - [ ] Parallel subagent prompt includes explicit cd to worktree
 - [ ] Code-reviewer receives worktree path parameter
 - [ ] Code-reviewer prompt includes explicit cd to worktree
+
+## Verification Commands
+
+```bash
+# Test 1: Check for orchestrator cd usage (should find NONE)
+echo "=== Checking for bare cd commands in orchestrator sections ==="
+grep -n "^cd " skills/executing-sequential-phase/SKILL.md skills/executing-parallel-phase/SKILL.md 2>/dev/null || echo "✓ No bare cd found"
+
+# Test 2: Verify pre-flight assertions exist
+echo "=== Checking for pre-flight location assertions ==="
+grep -n "Verify Orchestrator Location\|REPO_ROOT=\|CURRENT=\$(pwd)" skills/executing-sequential-phase/SKILL.md
+grep -n "Verify Orchestrator Location\|REPO_ROOT=\|CURRENT=\$(pwd)" skills/executing-parallel-phase/SKILL.md
+
+# Test 3: Verify bash -c pattern for worktree operations
+echo "=== Checking for bash -c pattern ==="
+grep -n 'bash -c "cd \.worktrees' skills/executing-sequential-phase/SKILL.md
+grep -n 'bash -c "cd \.worktrees' skills/executing-parallel-phase/SKILL.md
+
+# Test 4: Check subagent dispatch includes explicit cd
+echo "=== Checking subagent prompts for explicit cd instruction ==="
+grep -A 5 "Navigate to" skills/executing-sequential-phase/SKILL.md | grep "cd .worktrees"
+grep -A 5 "Navigate to" skills/executing-parallel-phase/SKILL.md | grep "cd .worktrees"
+
+# Test 5: Verify code-reviewer receives worktree context
+echo "=== Checking code-reviewer worktree context ==="
+grep -n "WORKTREE:" skills/executing-sequential-phase/SKILL.md
+grep -n "WORKTREE:" skills/executing-parallel-phase/SKILL.md
+```
+
+## Evidence of PASS
+
+### Orchestrator Location Discipline
+- [ ] NO bare `cd` commands in orchestrator workflow sections
+- [ ] All worktree git operations use: `git -C .worktrees/path command`
+- [ ] All worktree non-git operations use: `bash -c "cd path && command"`
+- [ ] Pre-flight assertion exists at start of both skills: "Step 0: Verify Orchestrator Location"
+
+### Pre-Flight Assertions
+- [ ] Sequential skill has location verification before Step 1
+- [ ] Parallel skill has location verification before Step 1
+- [ ] Assertions check: `CURRENT=$(pwd)` equals `REPO_ROOT=$(git rev-parse --show-toplevel)`
+- [ ] Error message is actionable: "You MUST run from repository root"
+
+### Subagent Context
+- [ ] Sequential subagent prompt: "1. Navigate to worktree: cd .worktrees/{path}"
+- [ ] Parallel subagent prompt: "1. Navigate to task worktree: cd .worktrees/{path}"
+- [ ] Both prompts include: "2. Verify isolation: pwd"
+- [ ] Code-reviewer receives: "WORKTREE: .worktrees/{run-id}-main"
+- [ ] Code-reviewer prompt includes: "cd {worktree-path}" instruction
+
+### Bash Pattern Compliance
+- [ ] Dependency installation uses: `bash -c "cd worktree && npm install"`
+- [ ] Quality checks use: `bash -c "cd worktree && npm test"`
+- [ ] NO heredoc patterns that might change orchestrator location
+- [ ] All patterns preserve orchestrator at repo root
+
+## Evidence of FAIL
+
+- [ ] Bare `cd` command found in orchestrator sections
+- [ ] Git operations without `-C` flag: `cd worktree && git status`
+- [ ] Missing pre-flight assertion in either skill
+- [ ] Subagent prompts missing explicit `cd` instruction
+- [ ] Code-reviewer not receiving worktree context
+- [ ] Heredoc patterns that cd without returning
+- [ ] Verification commands fail or return no matches
 - [ ] All subagent prompts include `pwd` verification step
 
 ### Pattern Consistency
