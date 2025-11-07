@@ -1,3 +1,15 @@
+---
+id: sequential-stacking
+type: integration
+severity: critical
+duration: 5m
+tags:
+  - sequential-execution
+  - git-stacking
+  - git-spice
+  - natural-stacking
+---
+
 # Test Scenario: Sequential Stacking
 
 ## Context
@@ -249,3 +261,63 @@ This scenario reveals important distinctions:
 3. **execute.md must clearly distinguish these patterns**
    - Lines 200-314 (sequential) should emphasize "natural stacking"
    - Lines 380-518 (parallel) should emphasize "manual stacking afterward"
+
+## Verification Commands
+
+### Check for gs branch create Usage
+
+```bash
+# Search execute.md for sequential phase branch creation pattern
+grep -A 5 "gs branch create" commands/execute.md | grep -B 5 "sequential"
+```
+
+**Expected:** Sequential phase section documents `gs branch create` as the only branching command needed.
+
+### Check for Natural Stacking Documentation
+
+```bash
+# Verify execute.md explains automatic stacking for sequential phases
+grep -i "natural.*stack\|automatic.*stack" commands/execute.md
+```
+
+**Expected:** Documentation explicitly states that sequential tasks stack automatically without manual commands.
+
+### Check Sequential Phase Logic
+
+```bash
+# Verify sequential phase section doesn't mention manual stacking
+grep -A 50 "Sequential Phase Execution" commands/execute.md | grep -i "upstack onto"
+```
+
+**Expected:** No results - sequential phases should NOT use `gs upstack onto`.
+
+### Verify Stack Structure After Execution
+
+```bash
+# Check that branches form linear chain
+gs ls | grep -A 3 "{runid}-task-1-1"
+```
+
+**Expected:** Output shows task-1-1 → task-2-1 → task-3-1 linear chain.
+
+## Evidence of PASS
+
+- [ ] execute.md sequential phase section uses `gs branch create` for automatic stacking
+- [ ] No `gs upstack onto` or other manual stacking commands in sequential phase documentation
+- [ ] Sequential phase section explicitly mentions "natural stacking" or "automatic stacking"
+- [ ] Branches stack naturally in linear chain (verified with `gs ls`)
+- [ ] Only one worktree (`{runid}-main`) used throughout sequential execution
+- [ ] Each task's branch parent is the previous task's branch
+- [ ] No orphaned branches on main (all tasks properly chained)
+- [ ] execute.md clearly distinguishes sequential (automatic) from parallel (manual) stacking
+
+## Evidence of FAIL
+
+- [ ] execute.md shows `gs upstack onto` commands in sequential phase section
+- [ ] Sequential phase documentation doesn't use `gs branch create`
+- [ ] No mention of automatic/natural stacking in sequential phase section
+- [ ] Final `gs ls` output shows tasks branching from main instead of each other
+- [ ] Branches are orphaned or non-linear
+- [ ] Multiple worktrees created for sequential tasks (should only be one)
+- [ ] execute.md treats sequential and parallel phases identically (missing key distinction)
+- [ ] Subagent instructions require manual stacking for sequential tasks

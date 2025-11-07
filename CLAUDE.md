@@ -110,22 +110,127 @@ Spectacular's `/spectacular:execute` command runs project-specific quality check
 
 ### Testing & Validation (Spectacular Plugin)
 
-This repository has **no traditional test/build commands** - it's pure markdown documentation for Claude Code.
+This repository has **no traditional test/build commands** - it's pure markdown documentation for Claude Code. Instead, we use **Test-Driven Development for workflow documentation**.
 
-**Validation approach:**
+#### The Testing System
 
-- **Automated testing:** Use `tests/running-spectacular-tests.md` to verify command implementations against test scenarios
-- **Manual testing:** Invoke commands in a test repository
-- **Skills testing:** Use the `testing-skills-with-subagents` skill from superpowers
-- Changes should be validated by running the actual workflow in a sample project
+**Core Skill:** `tests/testing-spectacular.md`
+- Enforces RED-GREEN-REFACTOR cycle for all spectacular changes
+- Binary pass/fail verdicts (no "mostly works")
+- Artifact storage for every test run
+- Evidence requirements: file:line references, command outputs, rationale
 
-**Running automated tests:**
+**Test Infrastructure:**
+- `tests/README.md` - Complete testing guide with step-by-step workflow
+- `tests/aggregate-results.sh` - Results aggregation and summary generation
 
-Ask Claude to follow the testing workflow:
+**Test Scenarios:** `tests/scenarios/{command}/*.md`
+- Machine-readable YAML frontmatter (id, type, severity, duration, tags)
+- Verification Commands section (executable bash commands)
+- Evidence of PASS/FAIL criteria (explicit checkboxes)
+- Binary verdicts only - either passes or fails
+
+#### Running Tests
+
+**Before committing any change to commands or skills:**
+
+```bash
+# Ask Claude Code to run the test suite
+"Run the test suite for execute command"
+"Run the full test suite"
+
+# Claude will follow tests/README.md workflow to:
+# 1. Create results directory
+# 2. Dispatch subagents in batches (max 10 concurrent)
+# 3. Aggregate results with tests/aggregate-results.sh
+# 4. Report pass/fail summary with todos for failures
+
+# View results manually
+cat tests/results/{timestamp}/summary.md
+cat tests/results/{timestamp}/scenarios/*.log
 ```
-"Follow tests/running-spectacular-tests.md for the execute command"
-"Run all spectacular test scenarios"
+
+**Test workflow (RED-GREEN-REFACTOR):**
+
+1. **RED Phase:** Create/find failing test scenario
+   - Real bug: Find scenario that should catch it, verify FAIL
+   - New feature: Write scenario first, verify FAIL (TDD)
+
+2. **GREEN Phase:** Fix implementation
+   - Update command/skill to meet scenario requirements
+   - Re-run tests, verify PASS
+   - Check for regressions (run full suite)
+
+3. **REFACTOR Phase:** Improve without breaking tests
+   - Add edge case coverage
+   - Improve clarity
+   - Re-run tests, verify still PASS
+
+#### Test Scenario Format
+
+**Example scenario structure:**
+
+```markdown
+---
+id: scenario-name
+type: integration              # unit, integration, e2e
+severity: critical             # critical, major, minor
+estimated_duration: 5m
+tags: [tag1, tag2]
+---
+
+# Test Scenario: Title
+
+## Context
+Brief description and why it's critical
+
+## Expected Behavior
+Detailed correct behavior description
+
+## Verification Commands
+```bash
+grep -n "expected text" skills/skill-name/SKILL.md
 ```
+
+## Evidence of PASS
+- [ ] Line X contains: "expected text"
+- [ ] Verification command exits 0
+- [ ] NO anti-pattern text found
+
+## Evidence of FAIL
+- [ ] Missing required text
+- [ ] Verification command fails
+```
+
+#### Integration with Development Workflow
+
+**When creating new command:**
+1. Write test scenario FIRST (RED)
+2. Run tests → scenario fails
+3. Write command implementation (GREEN)
+4. Run tests → scenario passes
+5. Improve clarity (REFACTOR)
+6. Commit with test results
+
+**When fixing bugs:**
+1. Reproduce with test scenario (RED)
+2. Verify scenario fails
+3. Fix implementation (GREEN)
+4. Verify scenario passes
+5. Run full suite (no regressions)
+6. Commit with evidence
+
+**When editing existing skills:**
+1. Identify affected scenarios
+2. Run tests → verify still pass
+3. Make changes
+4. Run tests → verify still pass
+5. If tests fail → fix implementation, not tests
+6. Commit with test results
+
+**The Iron Law:** NO SPECTACULAR CHANGES WITHOUT PASSING TESTS FIRST
+
+This applies to all commands, skills, bug fixes, and documentation updates.
 
 ### Plugin Development
 

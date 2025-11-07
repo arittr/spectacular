@@ -1,3 +1,12 @@
+---
+id: code-review-binary-enforcement
+type: integration
+severity: critical
+estimated_duration: 3m
+requires_git_repo: false
+tags: [code-review, quality-gate, binary-verdict, parsing]
+---
+
 # Test Scenario: Code Review Binary Enforcement
 
 ## Context
@@ -285,6 +294,69 @@ Review rejected → dispatch fix → re-run review → verify "Yes" → then pro
 - [ ] Both skills explicitly state: "Only 'Yes' allows proceeding"
 - [ ] Both skills show how to detect soft language
 - [ ] Both skills show how to handle no output
+
+## Verification Commands
+
+```bash
+# Check for binary parsing logic in sequential phase
+grep -A 10 "Ready to merge" skills/executing-sequential-phase/SKILL.md | head -20
+grep -n "dispatch fix subagent" skills/executing-sequential-phase/SKILL.md
+
+# Check for binary parsing logic in parallel phase
+grep -A 10 "Ready to merge" skills/executing-parallel-phase/SKILL.md | head -20
+grep -n "dispatch fix subagent" skills/executing-parallel-phase/SKILL.md
+
+# Verify "Yes" is required to proceed
+grep -n "Yes.*proceed\|proceed.*Yes" skills/executing-sequential-phase/SKILL.md
+grep -n "Yes.*proceed\|proceed.*Yes" skills/executing-parallel-phase/SKILL.md
+
+# Verify "No" and "With fixes" both trigger fixes
+grep -n "No.*fix\|With fixes.*fix" skills/executing-sequential-phase/SKILL.md
+grep -n "No.*fix\|With fixes.*fix" skills/executing-parallel-phase/SKILL.md
+
+# Check for re-review loop logic
+grep -n "Re-reviewing\|re-review" skills/executing-sequential-phase/SKILL.md
+grep -n "Re-reviewing\|re-review" skills/executing-parallel-phase/SKILL.md
+```
+
+## Evidence of PASS
+
+### Binary Parsing Logic
+- [ ] Sequential skill documents parsing: "Ready to merge? Yes" → proceed
+- [ ] Sequential skill documents parsing: "Ready to merge? No" → stop and fix
+- [ ] Sequential skill documents parsing: "Ready to merge? With fixes" → stop and fix
+- [ ] Parallel skill has identical parsing logic
+- [ ] Both skills treat "No" and "With fixes" identically (both trigger fixes)
+
+### Execution Flow
+- [ ] Only "Yes" allows proceeding to next phase
+- [ ] "No" triggers fix subagent dispatch (autonomous, no user prompt)
+- [ ] "With fixes" triggers fix subagent dispatch (autonomous, no user prompt)
+- [ ] After fix completion, re-review is automatic
+- [ ] Re-review loop continues until "Yes"
+
+### Error Handling
+- [ ] No output from review → treated as failure
+- [ ] Malformed output → treated as failure
+- [ ] Soft language detected → warning issued
+- [ ] All non-"Yes" cases stop execution
+
+### Consistency
+- [ ] Sequential and parallel phases have identical parsing
+- [ ] Same binary verdict interpretation
+- [ ] Same fix dispatch behavior
+- [ ] Same re-review logic
+
+## Evidence of FAIL
+
+- [ ] Orchestrator proceeds without "Ready to merge? Yes"
+- [ ] Soft language like "APPROVED WITH X" allows proceeding
+- [ ] No output treated as success
+- [ ] Different parsing logic between sequential and parallel
+- [ ] "With fixes" treated differently than "No"
+- [ ] No automatic re-review after fixes
+- [ ] User prompt appears instead of autonomous fix dispatch
+- [ ] Verification commands fail or return no matches
 
 ## Implementation Verification
 
