@@ -1,0 +1,93 @@
+# name: Spectacular Test Suite
+
+# on:
+#   # Run on release branches
+#   pull_request:
+#     branches: [main]
+#     paths:
+#       - "commands/**"
+#       - "skills/**"
+#       - "tests/**"
+
+#   # Manual trigger
+#   workflow_dispatch:
+#     inputs:
+#       scenarios:
+#         description: 'Scenarios to test (comma-separated, or "all")'
+#         required: false
+#         default: "all"
+
+# jobs:
+#   test:
+#     runs-on: ubuntu-latest
+#     # Only run on release PRs or manual trigger to control costs
+#     if: contains(github.head_ref, 'release') || github.event_name == 'workflow_dispatch'
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: "20"
+
+#       - name: Install Claude Code CLI
+#         run: |
+#           npm install -g @anthropic-ai/claude-code
+#           claude --version  # Verify installation
+
+#       - name: Run test suite
+#         id: tests
+#         env:
+#           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+#         run: |
+#           # Create timestamped results directory
+#           TIMESTAMP=$(date +%Y-%m-%dT%H%M%S)
+#           mkdir -p tests/results/$TIMESTAMP/scenarios
+
+#           echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+
+#           # execute test scenarios for the execute command
+#           claude -p "run the test suite for the execute command" --json
+
+#           # Aggregate results
+#           ./tests/aggregate-results.sh tests/results/$TIMESTAMP
+
+#       - name: Publish test results
+#         uses: dorny/test-reporter@v1
+#         if: always() # Run even if tests fail
+#         with:
+#           name: Spectacular Test Results
+#           path: tests/results/*/junit.xml
+#           reporter: java-junit
+#           fail-on-error: true
+
+#       - name: Upload detailed test logs
+#         uses: actions/upload-artifact@v4
+#         if: always()
+#         with:
+#           name: test-results-${{ steps.tests.outputs.timestamp }}
+#           path: |
+#             tests/results/${{ steps.tests.outputs.timestamp }}/
+#           retention-days: 30
+
+#       - name: Comment PR with results
+#         uses: actions/github-script@v7
+#         if: github.event_name == 'pull_request' && always()
+#         with:
+#           script: |
+#             const fs = require('fs');
+#             const timestamp = '${{ steps.tests.outputs.timestamp }}';
+#             const summaryPath = `tests/results/${timestamp}/summary.md`;
+
+#             if (fs.existsSync(summaryPath)) {
+#               const summary = fs.readFileSync(summaryPath, 'utf8');
+
+#               await github.rest.issues.createComment({
+#                 issue_number: context.issue.number,
+#                 owner: context.repo.owner,
+#                 repo: context.repo.repo,
+#                 body: `## Test Results\n\n${summary}\n\n[View detailed logs](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`
+#               });
+#             }
