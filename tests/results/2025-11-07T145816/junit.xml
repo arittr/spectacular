@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="spectacular" tests="19" failures="0" time="0">
+  <testsuite name="execute" tests="19" failures="0" time="0">
+    <testcase name="bash-pattern-consistency" classname="spectacular.execute" time="0"/>
+    <testcase name="cleanup-tmp-branches" classname="spectacular.execute" time="0"/>
+    <testcase name="code-review-binary-enforcement" classname="spectacular.execute" time="0"/>
+    <testcase name="code-review-malformed-retry" classname="spectacular.execute" time="0"/>
+    <testcase name="code-review-optimize-mode" classname="spectacular.execute" time="0"/>
+    <testcase name="code-review-rejection-loop" classname="spectacular.execute" time="0"/>
+    <testcase name="large-parallel-phase" classname="spectacular.execute" time="0"/>
+    <testcase name="missing-setup-commands" classname="spectacular.execute" time="0"/>
+    <testcase name="mixed-sequential-parallel-phases" classname="spectacular.execute" time="0"/>
+    <testcase name="orchestrator-location-discipline" classname="spectacular.execute" time="0"/>
+    <testcase name="parallel-stacking-2-tasks" classname="spectacular.execute" time="0"/>
+    <testcase name="parallel-stacking-3-tasks" classname="spectacular.execute" time="0"/>
+    <testcase name="parallel-stacking-4-tasks" classname="spectacular.execute" time="0"/>
+    <testcase name="quality-check-failure" classname="spectacular.execute" time="0"/>
+    <testcase name="sequential-stacking" classname="spectacular.execute" time="0"/>
+    <testcase name="single-task-parallel-phase" classname="spectacular.execute" time="0"/>
+    <testcase name="spec-injection-subagents" classname="spectacular.execute" time="0"/>
+    <testcase name="task-failure-recovery" classname="spectacular.execute" time="0"/>
+    <testcase name="worktree-creation" classname="spectacular.execute" time="0"/>
+  </testsuite>
+</testsuites>

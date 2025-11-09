@@ -2,47 +2,153 @@
 
 ## Overview
 
-This document describes how to test spectacular commands and skills using the built-in testing system.
+This document describes the **hybrid testing framework** for spectacular commands and skills.
 
 **Core philosophy:** Spectacular uses Test-Driven Development (TDD) for process documentation. Just as you wouldn't deploy code without tests, you shouldn't deploy commands/skills without verifying they work under realistic pressure.
 
-**What gets tested:**
+## Three Types of Tests
+
+Spectacular uses a **hybrid testing strategy** to catch different types of regressions:
+
+### 1. Validation Tests (Fast Guards)
+**Location:** `tests/scenarios/`
+**Speed:** ~2-5 seconds per test
+**Purpose:** Grep-based documentation validators that catch obvious regressions
+
+**What they test:**
+- Required sections exist in skills/commands
+- Critical patterns present (PHASE CONTEXT, DO NOT IMPLEMENT, etc.)
+- Rationalization tables include known shortcuts
+- Documentation structure intact
+
+**When they fail:**
+- Someone deleted a critical section
+- Refactoring removed required patterns
+- New skill missing mandatory structure
+
+**Example:**
+```bash
+# Verify PHASE CONTEXT section exists
+grep -n "PHASE CONTEXT:" skills/executing-sequential-phase/SKILL.md
+```
+
+### 2. Execution Tests (Git Mechanics)
+**Location:** `tests/execution/`
+**Speed:** ~1-2 seconds per test
+**Purpose:** Verify git operations produce correct state
+
+**What they test:**
+- Branches created with correct names
+- Branch stacking order (linear chains)
+- Worktree creation and cleanup
+- File creation in correct locations
+- No leftover temporary state
+
+**When they fail:**
+- Git command sequence broken
+- Branch naming changed incorrectly
+- Worktree cleanup failing
+- Stacking logic regressed
+
+**Example tests:**
+- `sequential-stacking.sh` - Tests natural stacking in shared worktree
+- `parallel-stacking-4-tasks.sh` - Tests isolated worktrees and linear stacking
+
+### 3. Pressure Tests (Agent Compliance)
+**Location:** `tests/pressure/`
+**Speed:** ~5-10 minutes per test
+**Purpose:** RED-GREEN-REFACTOR methodology to test agent compliance under temptation
+
+**What they test:**
+- Agents respect phase boundaries when tempted
+- Agents dispatch fix subagents instead of asking users
+- Agents read plans to understand scope
+- Skills resist rationalization under pressure
+
+**When they fail:**
+- Skill has loophole allowing shortcuts
+- Agent can rationalize away rules
+- Pressure scenario exposes missing guardrails
+
+**Example tests:**
+- `phase-boundaries.md` - Tests scope creep resistance under 5 types of pressure
+
+## Why All Three Types?
+
+**Validation tests alone:** Miss git mechanics and agent behavior
+**Execution tests alone:** Miss documentation gaps and agent compliance
+**Pressure tests alone:** Too slow to catch simple regressions
+
+**Together:** Fast feedback on obvious breaks, confidence in mechanics, proof of agent compliance
+
+## What Gets Tested
 
 - **Commands** (`commands/*.md`) - Orchestration workflows like `/spectacular:spec`, `/spectacular:plan`, `/spectacular:execute`
 - **Skills** (`skills/*/SKILL.md`) - Process documentation that commands reference
 - **Integration** - How commands + skills work together in real projects
 
-**Why testing is critical:**
+## Why Testing Is Critical
 
 - Commands orchestrate complex git-spice and worktree operations
 - Skills must resist Claude's natural tendency to rationalize away inconvenient rules
 - Failures under pressure (time constraints, coordination load) are hard to predict without testing
+- Manual e2e testing takes ~1 hour per scenario - automated tests run in seconds/minutes
 
 ## Running Tests
 
-### Quick Start
+### Unified Test Runner
 
-Ask Claude to run the test suite:
+The `tests/run-tests.sh` script runs all three types of tests:
+
+```bash
+# Run all test types for execute command
+./tests/run-tests.sh execute
+
+# Run specific test type
+./tests/run-tests.sh execute --type=validation  # Fast grep-based tests
+./tests/run-tests.sh execute --type=execution   # Git mechanics tests
+./tests/run-tests.sh execute --type=pressure    # Agent compliance tests
+
+# Run all tests for all commands
+./tests/run-tests.sh --all
+```
+
+### Quick Start (via Claude Code)
+
+Ask Claude to run tests:
 
 ```
-# Test specific command
+# Run all test types
 "Run the test suite for execute command"
-"Run the test suite for init command"
-"Run the test suite for spec command"
-"Run the test suite for plan command"
 
-# Test everything
+# Run specific type
+"Run execution tests for execute command"  # Fast git mechanics
+"Run pressure tests for execute command"    # Agent compliance (slow)
+
+# Full suite
 "Run the full test suite"
 ```
 
-Claude will automatically:
+### Test Execution Flow
 
-1. Discover scenarios (e.g., 19 for execute)
+**Validation tests (via subagent dispatch):**
+1. Discover scenarios (e.g., 6 for execute)
 2. Create timestamped results directory
-3. Dispatch subagents in batches of 10 (respects rate limits)
-4. Track progress with TodoWrite
-5. Aggregate results with `./tests/aggregate-results.sh`
-6. Report pass/fail summary
+3. Dispatch subagents in batches of 10
+4. Aggregate results with `./tests/aggregate-results.sh`
+
+**Execution tests (direct execution):**
+1. Discover test scripts in `tests/execution/`
+2. Run each test in isolated temp repo
+3. Verify git state with assertions
+4. Report pass/fail immediately
+
+**Pressure tests (via Claude Code):**
+1. Read pressure scenario
+2. RED phase: Dispatch without skill
+3. GREEN phase: Dispatch with skill
+4. REFACTOR phase: Test edge cases
+5. Report compliance
 
 ### Detailed Workflow
 
