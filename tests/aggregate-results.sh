@@ -49,24 +49,42 @@ PASS_COUNT=0
 FAIL_COUNT=0
 PASS_SCENARIOS=()
 FAIL_SCENARIOS=()
+TEST_CASES=()  # For JUnit XML
 
 for log_file in "$SCENARIOS_DIR"/*.log; do
   if [ ! -f "$log_file" ]; then
     continue
   fi
-  
+
   SCENARIO_NAME=$(basename "$log_file" .log)
-  
+
+  # Extract failure message if present (key points from Summary section)
+  FAILURE_MSG=""
+  if grep -q "^❌ FAIL" "$log_file"; then
+    # Extract "What's Missing" bullet points for concise CI summary
+    if grep -q "### What's Missing" "$log_file"; then
+      FAILURE_MSG=$(sed -n '/### What'"'"'s Missing/,/^### /p' "$log_file" | grep "^[0-9]" | head -10)
+    elif grep -q "### What Fails" "$log_file"; then
+      FAILURE_MSG=$(sed -n '/### What Fails/,/^### /p' "$log_file" | grep "^[0-9]" | head -10)
+    else
+      # Fall back to first line after ## Evidence
+      FAILURE_MSG=$(sed -n '/^## Evidence/,/^$/p' "$log_file" | grep -v "^## " | head -5)
+    fi
+  fi
+
   if grep -q "^✅ PASS" "$log_file"; then
     PASS_COUNT=$((PASS_COUNT + 1))
     PASS_SCENARIOS+=("$SCENARIO_NAME")
+    TEST_CASES+=("$SCENARIO_NAME|pass|")
   elif grep -q "^❌ FAIL" "$log_file"; then
     FAIL_COUNT=$((FAIL_COUNT + 1))
     FAIL_SCENARIOS+=("$SCENARIO_NAME")
+    TEST_CASES+=("$SCENARIO_NAME|fail|$FAILURE_MSG")
   else
     echo -e "${YELLOW}⚠️  Warning: Ambiguous result in $SCENARIO_NAME${NC}"
     FAIL_COUNT=$((FAIL_COUNT + 1))
     FAIL_SCENARIOS+=("$SCENARIO_NAME (ambiguous)")
+    TEST_CASES+=("$SCENARIO_NAME|fail|Ambiguous test result - no clear PASS/FAIL verdict found")
   fi
 done
 
@@ -188,6 +206,44 @@ fi
 
 echo ""
 echo "Summary saved to: $SUMMARY_FILE"
+
+# Generate JUnit XML
+JUNIT_FILE="$RESULTS_DIR/junit.xml"
+
+cat > "$JUNIT_FILE" << JUNIT_HEADER
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="spectacular" tests="$TOTAL_COUNT" failures="$FAIL_COUNT" time="0">
+  <testsuite name="execute" tests="$TOTAL_COUNT" failures="$FAIL_COUNT" time="0">
+JUNIT_HEADER
+
+# Add test cases
+for test_case in "${TEST_CASES[@]}"; do
+  IFS='|' read -r name status failure_msg <<< "$test_case"
+
+  # XML-escape the failure message
+  failure_msg_escaped=$(echo "$failure_msg" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+
+  if [ "$status" = "pass" ]; then
+    cat >> "$JUNIT_FILE" << TESTCASE_PASS
+    <testcase name="$name" classname="spectacular.execute" time="0"/>
+TESTCASE_PASS
+  else
+    cat >> "$JUNIT_FILE" << TESTCASE_FAIL
+    <testcase name="$name" classname="spectacular.execute" time="0">
+      <failure message="Test scenario failed">$failure_msg_escaped
+
+See detailed evidence: tests/results/$(basename "$RESULTS_DIR")/scenarios/$name.log</failure>
+    </testcase>
+TESTCASE_FAIL
+  fi
+done
+
+cat >> "$JUNIT_FILE" << JUNIT_FOOTER
+  </testsuite>
+</testsuites>
+JUNIT_FOOTER
+
+echo "JUnit XML saved to: $JUNIT_FILE"
 echo ""
 
 exit $EXIT_CODE
