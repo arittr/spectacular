@@ -190,6 +190,31 @@ done
 
 **Red flag:** "Share node_modules for efficiency" - Breaks isolation and causes race conditions.
 
+### Step 3.5: Extract Phase Context (Before Dispatching)
+
+**Before spawning subagents, extract phase boundaries from plan:**
+
+The orchestrator already parsed the plan in execute.md Step 1. Extract:
+- Current phase number and name
+- Tasks in THIS phase (what TO implement)
+- Tasks in LATER phases (what NOT to implement)
+
+**Format for subagent context:**
+```
+PHASE CONTEXT:
+- Phase {current-phase-id}/{total-phases}: {phase-name}
+- This phase includes: Task {task-ids-in-this-phase}
+
+LATER PHASES (DO NOT IMPLEMENT):
+- Phase {next-phase}: {phase-name} - {task-summary}
+- Phase {next+1}: {phase-name} - {task-summary}
+...
+
+If implementing work beyond this phase's tasks, STOP and report scope violation.
+```
+
+**Why critical:** Spec describes WHAT to build (entire feature). Plan describes HOW/WHEN (phase breakdown). Subagents need both to avoid scope creep.
+
 ### Step 4: Spawn Parallel Subagents
 
 **CRITICAL: Single message with multiple Task tools (true parallelism):**
@@ -202,7 +227,19 @@ ROLE: Implement Task {task-id} in ISOLATED worktree
 
 WORKTREE: .worktrees/{run-id}-task-{task-id}
 
-[Task details, acceptance criteria...]
+TASK: {task-name}
+FILES: {files-list}
+ACCEPTANCE CRITERIA: {criteria}
+
+PHASE CONTEXT:
+- Phase {current-phase-id}/{total-phases}: {phase-name}
+- This phase includes: Task {task-ids-in-this-phase}
+
+LATER PHASES (DO NOT IMPLEMENT):
+- Phase {next-phase}: {phase-name} - {task-summary}
+- Phase {next+1}: {phase-name} - {task-summary}
+
+Plan reference: specs/{run-id}-{feature-slug}/plan.md
 
 CRITICAL:
 1. Navigate to task worktree:
@@ -223,9 +260,15 @@ CRITICAL:
    The spec is your source of truth for architectural decisions.
    Constitution tells you HOW to code. Spec tells you WHAT to build.
 
-5. Implement task following spec + constitution
+5. VERIFY PHASE SCOPE before implementing:
+   - Read the phase context above
+   - Confirm this task belongs to Phase {current-phase-id}
+   - If tempted to implement later phase work, STOP
+   - The plan exists for a reason - respect phase boundaries
 
-6. Run quality checks with exit code validation:
+6. Implement task following spec + constitution + phase boundaries
+
+7. Run quality checks with exit code validation:
 
    **CRITICAL**: Use heredoc to prevent bash parsing errors:
 
@@ -309,14 +352,19 @@ CRITICAL:
 
    Do NOT create branch if quality checks fail
 
-7. Create branch: gs branch create {branch-name}
-8. Detach HEAD: git switch --detach
-9. Report completion
+8. Create branch: gs branch create {branch-name}
+9. Detach HEAD: git switch --detach
+10. Report completion
+
+CRITICAL:
+- Do NOT implement work from later phases (check PHASE CONTEXT above)
+- Verify scope before creating branch
 ```
 
 **Red flags:**
 - "I'll just do it myself" - NO. Subagents provide fresh context.
 - "Execute sequentially in main worktree" - NO. Destroys parallelism.
+- "Spec mentions feature X, I'll implement it now" - NO. Check phase boundaries first.
 
 ### Step 5: Verify Completion (BEFORE Stacking)
 
@@ -496,6 +544,19 @@ Phase {N} complete - proceeding to next phase
 
 Use `requesting-code-review` skill to call code-reviewer agent, then parse results STRICTLY:
 
+**CRITICAL - AUTONOMOUS EXECUTION (NO USER PROMPTS):**
+
+This is an automated execution workflow. Code review rejections trigger automatic fix loops, NOT user prompts.
+
+**NEVER ask user what to do, even if:**
+- Issues seem "architectural" or "require product decisions"
+- Scope creep with passing quality checks (implement less, not ask)
+- Multiple rejections (use escalation limit at 3, not ask user)
+- Uncertain how to fix (fix subagent figures it out with spec + constitution context)
+- Code works but violates plan (plan violation = failure, auto-fix to plan)
+
+**Autonomous execution means AUTONOMOUS.** User prompts break automation and violate this skill.
+
 1. **Dispatch code review:**
    ```
    Skill tool: requesting-code-review
@@ -505,6 +566,8 @@ Use `requesting-code-review` skill to call code-reviewer agent, then parse resul
    - PHASE: {phase-number}
    - TASKS: {task-list}
    - BASE_BRANCH: {base-branch-name}
+   - SPEC: specs/{run-id}-{feature-slug}/spec.md
+   - PLAN: specs/{run-id}-{feature-slug}/plan.md (for phase boundary validation)
    ```
 
 2. **Parse output using binary algorithm:**
@@ -519,16 +582,14 @@ Use `requesting-code-review` skill to call code-reviewer agent, then parse resul
      - STOP execution
      - Report: "❌ Code review REJECTED - critical issues found"
      - List all Critical and Important issues from review
-     - Dispatch fix subagent to address all identified issues
-     - DO NOT ask user what to do - autonomous fixing is expected
+     - Dispatch fix subagent IMMEDIATELY (no user prompt, no questions)
      - Go to step 5 (re-review after fixes)
 
    - ❌ **"Ready to merge? With fixes"** → REJECTED
      - STOP execution
      - Report: "❌ Code review requires fixes before proceeding"
      - List all issues from review
-     - Dispatch fix subagent to address all identified issues
-     - DO NOT ask user what to do - autonomous fixing is expected
+     - Dispatch fix subagent IMMEDIATELY (no user prompt, no questions)
      - Go to step 5 (re-review after fixes)
 
    - ⚠️ **No output / empty response** → RETRY ONCE
@@ -612,12 +673,26 @@ Use `requesting-code-review` skill to call code-reviewer agent, then parse resul
       - HOW features should integrate (system boundaries)
       - WHAT requirements must be met (acceptance criteria)
 
-   3. Apply fixes following spec + constitution patterns
+   3. Read implementation plan: specs/{run-id}-{feature-slug}/plan.md
+
+      The plan provides phase boundaries and scope:
+      - WHEN to implement features (which phase owns what)
+      - WHAT tasks belong to Phase {N} (scope boundaries)
+      - WHAT tasks belong to later phases (do NOT implement)
+
+      **If scope creep detected (implemented work from later phases):**
+      - Roll back to Phase {N} scope ONLY
+      - Remove implementations that belong to later phases
+      - Keep ONLY the work defined in Phase {N} tasks
+      - The plan exists for a reason - respect phase boundaries
+
+   4. Apply fixes following spec + constitution + plan boundaries
 
    CRITICAL: Work in .worktrees/{runid}-main
    CRITICAL: Amend existing branch or add new commit (do NOT create new branch)
    CRITICAL: Run all quality checks before completion (test, lint, build)
    CRITICAL: Verify all issues resolved before reporting completion
+   CRITICAL: If scope creep, implement LESS not ask user what to keep
 
    # After fix completes
    echo "⏺ Re-reviewing Phase {N} after fixes (iteration $((REJECTION_COUNT + 1)))..."
@@ -664,6 +739,9 @@ Use `requesting-code-review` skill to call code-reviewer agent, then parse resul
 | "Review rejected, let me ask user what to do" | Autonomous execution means automatic fixes. No asking. |
 | "Issues are complex, user should decide" | Fix subagent handles complexity. That's the architecture. |
 | "Safer to get user input before fixing" | Re-review provides safety. Fix, review, repeat until clean. |
+| "Scope creep but quality passes, ask user to choose" | Plan violation = failure. Fix subagent removes extra scope automatically. |
+| "Work is done correctly, just ahead of schedule" | Phases exist for review isolation. Implement less, not merge early. |
+| "Spec mentions feature X, might as well implement now" | Spec = WHAT to build total. Plan = WHEN to build each piece. Check phase. |
 
 ## Red Flags - STOP and Follow Process
 
