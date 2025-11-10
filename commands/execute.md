@@ -4,6 +4,29 @@ description: Execute implementation plan with automatic sequential/parallel orch
 
 You are executing an implementation plan.
 
+## Architecture
+
+The execute command uses a three-layer skill architecture for separation of concerns and cognitive load reduction:
+
+**Orchestrator Layer** (`executing-sequential-phase`, `executing-parallel-phase`)
+- Responsibilities: Setup, dispatch, verification, code review orchestration
+- Size: ~256 lines (sequential), ~713 lines (parallel)
+- Focus: Workflow coordination, not task implementation
+
+**Task Execution Layer** (`sequential-phase-task`, `parallel-phase-task`)
+- Responsibilities: Phase boundaries, spec reading, implementation, branch creation
+- Size: ~89-92 lines each (86% cognitive load reduction from original 750 lines)
+- Focus: What subagents need to know to implement a single task
+
+**Verification Layer** (`phase-task-verification`)
+- Responsibilities: Shared git operations (add, branch create, HEAD verify, detach)
+- Size: ~92 lines
+- Used by: Both sequential and parallel task skills (eliminates duplication)
+
+**Maintainability benefit:** Orchestrator features (resume support, enhanced error recovery, code review improvements) can be added without modifying task skills. Subagents receive only the ~90 lines of task execution instructions they need.
+
+**Testing framework:** This plugin uses Test-Driven Development for workflow documentation. See `tests/README.md` and `CLAUDE.md` for the complete testing system. All changes to commands and skills must pass the test suite before committing.
+
 ## Available Skills
 
 **Skills are referenced on-demand when you encounter the relevant step. Do not pre-read all skills upfront.**
