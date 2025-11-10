@@ -215,15 +215,19 @@ If implementing work beyond this phase's tasks, STOP and report scope violation.
 
 **Why critical:** Spec describes WHAT to build (entire feature). Plan describes HOW/WHEN (phase breakdown). Subagents need both to avoid scope creep.
 
-### Step 4: Spawn Parallel Subagents
+### Step 4: Dispatch Parallel Tasks
 
-**CRITICAL: Single message with multiple Task tools (true parallelism):**
+**CRITICAL: Single message with multiple Skill tool calls (true parallelism):**
 
 **Only dispatch for PENDING tasks** (from Step 1.5). Completed tasks already have branches and should not be re-executed.
 
-For each pending task, dispatch with prompt:
+For each pending task, dispatch in parallel:
 ```
-ROLE: Implement Task {task-id} in ISOLATED worktree
+Skill: parallel-phase-task
+
+Context:
+
+ROLE: Implement Task {task-id} in isolated worktree (parallel phase)
 
 WORKTREE: .worktrees/{run-id}-task-{task-id}
 
@@ -231,135 +235,36 @@ TASK: {task-name}
 FILES: {files-list}
 ACCEPTANCE CRITERIA: {criteria}
 
-PHASE CONTEXT:
-- Phase {current-phase-id}/{total-phases}: {phase-name}
-- This phase includes: Task {task-ids-in-this-phase}
+PHASE BOUNDARIES:
+===== PHASE BOUNDARIES - CRITICAL =====
 
-LATER PHASES (DO NOT IMPLEMENT):
+Phase {current-phase-id}/{total-phases}: {phase-name}
+This phase includes ONLY: Task {task-ids-in-this-phase}
+
+DO NOT CREATE ANY FILES from later phases.
+
+Later phases (DO NOT CREATE):
 - Phase {next-phase}: {phase-name} - {task-summary}
-- Phase {next+1}: {phase-name} - {task-summary}
+  ❌ NO implementation files
+  ❌ NO stub functions (even with TODOs)
+  ❌ NO type definitions or interfaces
+  ❌ NO test scaffolding or temporary code
 
-Plan reference: specs/{run-id}-{feature-slug}/plan.md
+If tempted to create ANY file from later phases, STOP.
+"Not fully implemented" = violation.
+"Just types/stubs/tests" = violation.
+"Temporary/for testing" = violation.
 
-CRITICAL:
-1. Navigate to task worktree:
-   cd .worktrees/{run-id}-task-{task-id}
+==========================================
 
-2. Verify isolation:
-   pwd  # Must show task worktree path
-
-3. Read constitution (if exists): docs/constitutions/current/
-
-4. Read feature specification: specs/{run-id}-{feature-slug}/spec.md
-
-   This provides:
-   - WHAT to build (requirements, user flows)
-   - WHY decisions were made (architecture rationale)
-   - HOW features integrate (system boundaries)
-
-   The spec is your source of truth for architectural decisions.
-   Constitution tells you HOW to code. Spec tells you WHAT to build.
-
-5. VERIFY PHASE SCOPE before implementing:
-   - Read the phase context above
-   - Confirm this task belongs to Phase {current-phase-id}
-   - If tempted to implement later phase work, STOP
-   - The plan exists for a reason - respect phase boundaries
-
-6. Implement task following spec + constitution + phase boundaries
-
-7. Run quality checks with exit code validation:
-
-   **CRITICAL**: Use heredoc to prevent bash parsing errors:
-
-   ```bash
-   bash <<'EOF'
-   # Test check with detailed error reporting
-   TEST_OUTPUT=$(npm test 2>&1)
-   TEST_EXIT=$?
-
-   if [ $TEST_EXIT -ne 0 ]; then
-     echo "❌ QUALITY CHECK FAILED"
-     echo ""
-     echo "Check: npm test"
-     echo "Exit code: $TEST_EXIT"
-     echo ""
-     echo "Output:"
-     echo "$TEST_OUTPUT"
-     echo ""
-     echo "Location: $(pwd)"
-     echo ""
-     echo "Next steps:"
-     echo "1. Review test failures above"
-     echo "2. Fix implementation in this worktree"
-     echo "3. Verify fix: npm test"
-     echo "4. Create branch manually: gs branch create {branch-name} -m 'message'"
-     echo "5. Re-run /spectacular:execute to resume"
-     exit 1
-   fi
-
-   # Lint check with detailed error reporting
-   LINT_OUTPUT=$(npm run lint 2>&1)
-   LINT_EXIT=$?
-
-   if [ $LINT_EXIT -ne 0 ]; then
-     echo "❌ QUALITY CHECK FAILED"
-     echo ""
-     echo "Check: npm run lint"
-     echo "Exit code: $LINT_EXIT"
-     echo ""
-     echo "Output:"
-     echo "$LINT_OUTPUT"
-     echo ""
-     echo "Location: $(pwd)"
-     echo ""
-     echo "Next steps:"
-     echo "1. Review lint errors above"
-     echo "2. Fix code in this worktree"
-     echo "3. Verify fix: npm run lint"
-     echo "4. Create branch manually: gs branch create {branch-name} -m 'message'"
-     echo "5. Re-run /spectacular:execute to resume"
-     exit 1
-   fi
-
-   # Build check with detailed error reporting
-   BUILD_OUTPUT=$(npm run build 2>&1)
-   BUILD_EXIT=$?
-
-   if [ $BUILD_EXIT -ne 0 ]; then
-     echo "❌ QUALITY CHECK FAILED"
-     echo ""
-     echo "Check: npm run build"
-     echo "Exit code: $BUILD_EXIT"
-     echo ""
-     echo "Output:"
-     echo "$BUILD_OUTPUT"
-     echo ""
-     echo "Location: $(pwd)"
-     echo ""
-     echo "Next steps:"
-     echo "1. Review build errors above"
-     echo "2. Fix code in this worktree"
-     echo "3. Verify fix: npm run build"
-     echo "4. Create branch manually: gs branch create {branch-name} -m 'message'"
-     echo "5. Re-run /spectacular:execute to resume"
-     exit 1
-   fi
-   EOF
-   ```
-
-   **Why heredoc**: Prevents parsing errors when commands are wrapped by orchestrator.
-
-   Do NOT create branch if quality checks fail
-
-8. Create branch: gs branch create {branch-name}
-9. Detach HEAD: git switch --detach
-10. Report completion
-
-CRITICAL:
-- Do NOT implement work from later phases (check PHASE CONTEXT above)
-- Verify scope before creating branch
+CONTEXT REFERENCES:
+- Spec: specs/{run-id}-{feature-slug}/spec.md
+- Constitution: docs/constitutions/current/
+- Plan: specs/{run-id}-{feature-slug}/plan.md
+- Worktree: .worktrees/{run-id}-task-{task-id}
 ```
+
+**Parallel dispatch:** All pending tasks dispatched in single message (true concurrency).
 
 **Red flags:**
 - "I'll just do it myself" - NO. Subagents provide fresh context.
