@@ -109,9 +109,11 @@ COMPLETED_TASKS=()
 PENDING_TASKS=()
 
 for TASK_ID in {task-ids}; do
-  BRANCH_NAME="{runid}-task-{phase-id}-${TASK_ID}-{short-name}"
+  # Use pattern matching to find branch (short-name varies)
+  BRANCH_PATTERN="{runid}-task-{phase-id}-${TASK_ID}-"
+  BRANCH_NAME=$(git branch | grep "^  ${BRANCH_PATTERN}" | sed 's/^  //' | head -n1)
 
-  if git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
+  if [ -n "$BRANCH_NAME" ]; then
     echo "✓ Task ${TASK_ID} already complete: $BRANCH_NAME"
     COMPLETED_TASKS+=("$TASK_ID")
   else
@@ -356,9 +358,11 @@ FAILED_TASKS=()
 
 # Check ALL task IDs, not just pending - need to verify complete set exists
 for TASK_ID in {task-ids}; do
-  BRANCH_NAME="{runid}-task-{phase-id}-${TASK_ID}-{short-name}"
+  # Use pattern matching to find branch (short-name varies)
+  BRANCH_PATTERN="{runid}-task-{phase-id}-${TASK_ID}-"
+  BRANCH_NAME=$(git branch | grep "^  ${BRANCH_PATTERN}" | sed 's/^  //' | head -n1)
 
-  if git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
+  if [ -n "$BRANCH_NAME" ]; then
     COMPLETED_TASKS+=("Task ${TASK_ID}: $BRANCH_NAME")
   else
     FAILED_TASKS+=("Task ${TASK_ID}")
@@ -404,6 +408,17 @@ echo "✅ All {task-count} tasks completed successfully"
 # Stack branches in main worktree using heredoc (orchestrator doesn't cd)
 bash <<'EOF'
 cd .worktrees/{runid}-main
+
+# Get base branch (what parallel tasks should stack onto)
+BASE_BRANCH=$(git branch --show-current)
+
+# Ensure base branch is tracked before stacking onto it
+# (Sequential phases may have created branches without tracking)
+if ! gs branch track --show "$BASE_BRANCH" >/dev/null 2>&1; then
+  echo "⏺ Base branch not tracked yet, tracking now: $BASE_BRANCH"
+  git checkout "$BASE_BRANCH"
+  gs branch track
+fi
 
 TASK_BRANCHES=( {array-of-branch-names} )
 TASK_COUNT=${#TASK_BRANCHES[@]}
