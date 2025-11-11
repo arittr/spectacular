@@ -90,12 +90,10 @@ fi
 
 ### Step 2: Execute Tasks Sequentially
 
-**For each task in order, dispatch sequential-phase-task skill:**
+**For each task in order, spawn ONE subagent with embedded instructions:**
 
 ```
-Skill: sequential-phase-task
-
-Context:
+Task(Implement Task {task-id}: {task-name})
 
 ROLE: Implement Task {task-id} in main worktree (sequential phase)
 
@@ -133,6 +131,83 @@ CONTEXT REFERENCES:
 - Constitution: docs/constitutions/current/
 - Plan: specs/{run-id}-{feature-slug}/plan.md
 - Worktree: .worktrees/{run-id}-main
+
+INSTRUCTIONS:
+
+1. Navigate to main worktree:
+   cd .worktrees/{run-id}-main
+
+2. Read constitution (if exists): docs/constitutions/current/
+
+3. Read feature specification: specs/{run-id}-{feature-slug}/spec.md
+
+   This provides:
+   - WHAT to build (requirements, user flows)
+   - WHY decisions were made (architecture rationale)
+   - HOW features integrate (system boundaries)
+
+   The spec is your source of truth for architectural decisions.
+   Constitution tells you HOW to code. Spec tells you WHAT to build.
+
+4. VERIFY PHASE SCOPE before implementing:
+   - Read the PHASE BOUNDARIES section above
+   - Confirm this task belongs to Phase {current-phase-id}
+   - If tempted to implement later phase work, STOP
+   - The plan exists for a reason - respect phase boundaries
+
+5. Implement task following spec + constitution + phase boundaries
+
+6. Run quality checks with exit code validation:
+
+   **CRITICAL**: Use heredoc to prevent bash parsing errors:
+
+   bash <<'EOF'
+   npm test
+   if [ $? -ne 0 ]; then
+     echo "❌ Tests failed"
+     exit 1
+   fi
+
+   npm run lint
+   if [ $? -ne 0 ]; then
+     echo "❌ Lint failed"
+     exit 1
+   fi
+
+   npm run build
+   if [ $? -ne 0 ]; then
+     echo "❌ Build failed"
+     exit 1
+   fi
+   EOF
+
+   **Why heredoc**: Prevents parsing errors when commands are wrapped by orchestrator.
+
+7. Create stacked branch using verification skill:
+
+   Skill: phase-task-verification
+
+   Parameters:
+   - RUN_ID: {run-id}
+   - TASK_ID: {phase}-{task}
+   - TASK_NAME: {short-name}
+   - COMMIT_MESSAGE: "[Task {phase}.{task}] {task-name}"
+   - MODE: sequential
+
+   The verification skill will:
+   a) Stage changes with git add .
+   b) Create branch with gs branch create
+   c) Verify HEAD points to new branch
+   d) Stay on branch (next task builds on it)
+
+8. Report completion
+
+CRITICAL:
+- Work in .worktrees/{run-id}-main, NOT main repo
+- Stay on your branch when done (next task builds on it)
+- Do NOT create worktrees
+- Do NOT use `gs upstack onto`
+- Do NOT implement work from later phases (check PHASE BOUNDARIES above)
 ```
 
 **Sequential dispatch:** Wait for each task to complete before starting next.
@@ -141,6 +216,7 @@ CONTEXT REFERENCES:
 - "Dispatch all tasks in parallel" - NO. Sequential = one at a time.
 - "Create task-specific worktrees" - NO. Sequential = shared worktree.
 - "Spec mentions feature X, I'll implement it now" - NO. Check phase boundaries first.
+- "I'll run git add myself" - NO. Let subagent use phase-task-verification skill.
 
 ### Step 3: Verify Natural Stack Formation
 
