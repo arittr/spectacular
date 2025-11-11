@@ -217,15 +217,13 @@ If implementing work beyond this phase's tasks, STOP and report scope violation.
 
 ### Step 4: Dispatch Parallel Tasks
 
-**CRITICAL: Single message with multiple Skill tool calls (true parallelism):**
+**CRITICAL: Single message with multiple Task tool calls (true parallelism):**
 
 **Only dispatch for PENDING tasks** (from Step 1.5). Completed tasks already have branches and should not be re-executed.
 
-For each pending task, dispatch in parallel:
+For each pending task, spawn subagent with embedded instructions (dispatch ALL in single message):
 ```
-Skill: parallel-phase-task
-
-Context:
+Task(Implement Task {task-id}: {task-name})
 
 ROLE: Implement Task {task-id} in isolated worktree (parallel phase)
 
@@ -262,6 +260,82 @@ CONTEXT REFERENCES:
 - Constitution: docs/constitutions/current/
 - Plan: specs/{run-id}-{feature-slug}/plan.md
 - Worktree: .worktrees/{run-id}-task-{task-id}
+
+INSTRUCTIONS:
+
+1. Navigate to isolated worktree:
+   cd .worktrees/{run-id}-task-{task-id}
+
+2. Read constitution (if exists): docs/constitutions/current/
+
+3. Read feature specification: specs/{run-id}-{feature-slug}/spec.md
+
+   This provides:
+   - WHAT to build (requirements, user flows)
+   - WHY decisions were made (architecture rationale)
+   - HOW features integrate (system boundaries)
+
+   The spec is your source of truth for architectural decisions.
+   Constitution tells you HOW to code. Spec tells you WHAT to build.
+
+4. VERIFY PHASE SCOPE before implementing:
+   - Read the PHASE BOUNDARIES section above
+   - Confirm this task belongs to Phase {current-phase-id}
+   - If tempted to implement later phase work, STOP
+   - The plan exists for a reason - respect phase boundaries
+
+5. Implement task following spec + constitution + phase boundaries
+
+6. Run quality checks with exit code validation:
+
+   **CRITICAL**: Use heredoc to prevent bash parsing errors:
+
+   bash <<'EOF'
+   npm test
+   if [ $? -ne 0 ]; then
+     echo "❌ Tests failed"
+     exit 1
+   fi
+
+   npm run lint
+   if [ $? -ne 0 ]; then
+     echo "❌ Lint failed"
+     exit 1
+   fi
+
+   npm run build
+   if [ $? -ne 0 ]; then
+     echo "❌ Build failed"
+     exit 1
+   fi
+   EOF
+
+   **Why heredoc**: Prevents parsing errors when commands are wrapped by orchestrator.
+
+7. Create branch and detach HEAD using verification skill:
+
+   Skill: phase-task-verification
+
+   Parameters:
+   - RUN_ID: {run-id}
+   - TASK_ID: {phase}-{task}
+   - TASK_NAME: {short-name}
+   - COMMIT_MESSAGE: "[Task {phase}.{task}] {task-name}"
+   - MODE: parallel
+
+   The verification skill will:
+   a) Stage changes with git add .
+   b) Create branch with gs branch create
+   c) Detach HEAD with git switch --detach
+   d) Verify HEAD is detached (makes branch accessible in parent repo)
+
+8. Report completion
+
+CRITICAL:
+- Work in .worktrees/{run-id}-task-{task-id}, NOT main repo
+- Do NOT stay on branch - verification skill detaches HEAD
+- Do NOT create additional worktrees
+- Do NOT implement work from later phases (check PHASE BOUNDARIES above)
 ```
 
 **Parallel dispatch:** All pending tasks dispatched in single message (true concurrency).
@@ -270,6 +344,7 @@ CONTEXT REFERENCES:
 - "I'll just do it myself" - NO. Subagents provide fresh context.
 - "Execute sequentially in main worktree" - NO. Destroys parallelism.
 - "Spec mentions feature X, I'll implement it now" - NO. Check phase boundaries first.
+- "I'll run git add myself" - NO. Let subagent use phase-task-verification skill.
 
 ### Step 5: Verify Completion (BEFORE Stacking)
 
