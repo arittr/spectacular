@@ -1,6 +1,6 @@
 # Spectacular
 
-[![Install](https://img.shields.io/badge/install-arittr%2Fspectacular-5B3FFF?logo=claude)](https://github.com/arittr/spectacular#installation)
+[![Install](https://img.shields.io/badge/install-arittr%2Fspectacular-5B3FFF?logo=claude)](https://github.com/arittr/spectacular#installation--quick-start)
 [![Version](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/arittr/spectacular/main/.claude-plugin/plugin.json&label=version&query=$.version&color=orange)](https://github.com/arittr/spectacular/releases)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -16,8 +16,7 @@ Enable AI agents to autonomously implement complex features in hours instead of 
 - [The Solution](#the-solution)
 - [How It Works](#how-it-works)
 - [Technical Deep Dive](#technical-deep-dive)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
+- [Installation & Quick Start](#installation--quick-start)
 - [Complete Workflow Example](#complete-workflow-example)
 - [Command Reference](#command-reference)
 - [Project Setup](#project-setup)
@@ -79,7 +78,7 @@ Spectacular solves these problems through **spec-anchored development** with **a
 
 Every feature gets a comprehensive specification that serves as the unchanging anchor point for ALL implementation work:
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │  Feature Specification (spec.md)                    │
 │  ┌─────────────────────────────────────────────┐    │
@@ -114,7 +113,7 @@ Every feature gets a comprehensive specification that serves as the unchanging a
 
 The planner analyzes your feature spec and automatically identifies which work can run in parallel:
 
-```
+```text
 SEQUENTIAL (before):
 ┌─────────────────────────────────────────────────────┐
 │ Task 1: API endpoints        12 min                 │
@@ -176,7 +175,7 @@ docs/constitutions/
 
 ### Workflow Diagram
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                    USER DESCRIBES FEATURE                       │
 │        "Add real-time notifications with WebSocket"             │
@@ -335,7 +334,7 @@ Spectacular uses an orchestrator-with-embedded-instructions architecture to mini
 
 **Traditional monolithic approach:**
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │ Single 750-line skill file                  │
 │ ┌─────────────────────────────────────────┐ │
@@ -353,7 +352,7 @@ Spectacular uses an orchestrator-with-embedded-instructions architecture to mini
 
 **Spectacular's layered approach:**
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │ Orchestrator Skill (464-850 lines)          │
 │ ┌─────────────────────────────────────────┐ │
@@ -473,7 +472,7 @@ Both can run npm/bun install, tests, linting independently.
 
 #### The Parallel Execution Flow
 
-```
+```text
 Orchestrator (main process):
   ┌─────────────────────────────────────────────────┐
   │ 1. Read plan                                    │
