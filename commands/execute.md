@@ -6,24 +6,27 @@ You are executing an implementation plan.
 
 ## Architecture
 
-The execute command uses a three-layer skill architecture for separation of concerns and cognitive load reduction:
+The execute command uses an orchestrator-with-embedded-instructions architecture for cognitive load reduction:
 
-**Orchestrator Layer** (`executing-sequential-phase`, `executing-parallel-phase`)
-- Responsibilities: Setup, dispatch, verification, code review orchestration
-- Size: ~256 lines (sequential), ~713 lines (parallel)
-- Focus: Workflow coordination, not task implementation
+**Orchestrator Skills** (`executing-sequential-phase`, `executing-parallel-phase`)
+- Responsibilities: Setup, worktree management, dispatch coordination, code review orchestration
+- Size: ~464 lines (sequential), ~850 lines (parallel)
+- Dispatches: Task tool with embedded execution instructions (~150 lines per task)
+- Focus: Manages workflow lifecycle, embeds focused task instructions for subagents
 
-**Task Execution Layer** (`sequential-phase-task`, `parallel-phase-task`)
-- Responsibilities: Phase boundaries, spec reading, implementation, branch creation
-- Size: ~89-92 lines each (86% cognitive load reduction from original 750 lines)
-- Focus: What subagents need to know to implement a single task
-
-**Verification Layer** (`phase-task-verification`)
+**Verification Skill** (`phase-task-verification`)
 - Responsibilities: Shared git operations (add, branch create, HEAD verify, detach)
 - Size: ~92 lines
-- Used by: Both sequential and parallel task skills (eliminates duplication)
+- Used by: Task subagents via Skill tool (both sequential and parallel)
+- Focus: Eliminates duplication of branch creation/verification logic
 
-**Maintainability benefit:** Orchestrator features (resume support, enhanced error recovery, code review improvements) can be added without modifying task skills. Subagents receive only the ~90 lines of task execution instructions they need.
+**Cognitive Load Reduction:**
+- Original: 750-line monolithic skills (orchestration + task + verification mixed)
+- Current: Subagents receive ~150 lines of focused task execution instructions via Task tool
+- Benefit: 80% reduction in content subagents must parse (only see task instructions, not orchestration)
+- Verification: Shared 92-line skill eliminates duplication
+
+**Maintainability benefit:** Orchestrator features (resume support, enhanced error recovery, verification improvements) can be added without affecting task execution instructions. Subagents receive focused, consistent instructions while orchestrators handle workflow complexity.
 
 **Testing framework:** This plugin uses Test-Driven Development for workflow documentation. See `tests/README.md` and `CLAUDE.md` for the complete testing system. All changes to commands and skills must pass the test suite before committing.
 
