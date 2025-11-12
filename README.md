@@ -334,6 +334,7 @@ No degradation. No drift.
 Spectacular uses an orchestrator-with-embedded-instructions architecture to minimize cognitive overhead for task subagents:
 
 **Traditional monolithic approach:**
+
 ```
 ┌─────────────────────────────────────────────┐
 │ Single 750-line skill file                  │
@@ -345,15 +346,16 @@ Spectacular uses an orchestrator-with-embedded-instructions architecture to mini
 │ │ Code review orchestration (100 lines)   │ │
 │ └─────────────────────────────────────────┘ │
 │                                             │
-│ Subagent must parse all 750 lines          │
-│ to find the ~200 lines of task instructions│
+│ Subagent must parse all 750 lines           │
+│ to find the ~200 lines of task instructions │
 └─────────────────────────────────────────────┘
 ```
 
 **Spectacular's layered approach:**
+
 ```
 ┌─────────────────────────────────────────────┐
-│ Orchestrator Skill (464-850 lines)         │
+│ Orchestrator Skill (464-850 lines)          │
 │ ┌─────────────────────────────────────────┐ │
 │ │ Setup logic                             │ │
 │ │ Dispatch coordination                   │ │
@@ -1169,6 +1171,8 @@ For each phase in the plan:
 - Resume from any phase if interrupted
 - Check `gs log short` frequently to see stack structure
 
+See also in-repo command docs for deeper details: `commands/init.md`, `commands/spec.md`, `commands/plan.md`, `commands/execute.md`.
+
 ## Project Setup
 
 ### Required: Setup Commands
@@ -1209,6 +1213,46 @@ Every project using spectacular MUST define setup commands in `CLAUDE.md`:
 - After creating main worktree (`/spectacular:spec`)
 - Before tasks in sequential phases
 - Before each task in parallel phases
+
+### Examples: Minimal CLAUDE.md templates
+
+Copy one of these minimal templates into your project's `CLAUDE.md` and adjust commands to your toolchain.
+
+Node/TypeScript (npm):
+
+```markdown
+## Development Commands
+
+### Setup
+
+- **install**: `npm ci`
+- **postinstall**: `true`
+
+### Quality Checks
+
+- **test**: `npm test --silent`
+- **lint**: `npm run lint --silent || true`
+- **format**: `npm run format --silent || true`
+- **build**: `npm run build --silent || true`
+```
+
+Python (pytest/ruff/black):
+
+```markdown
+## Development Commands
+
+### Setup
+
+- **install**: `python -m pip install -r requirements.txt`
+- **postinstall**: `true`
+
+### Quality Checks
+
+- **test**: `pytest -q`
+- **lint**: `ruff check . || true`
+- **format**: `black --check . || true`
+- **build**: `true`
+```
 
 ### Optional: Constitutions
 
@@ -1663,6 +1707,58 @@ git commit --amend -m "[Task X] Fixed review feedback"
    - Parallel execution queues naturally
 
 **Solution**: Review plan.md and ensure true independence.
+
+## Local Development
+
+### Run the test suite
+
+- Quick git mechanics check (seconds):
+
+```bash
+./tests/run-tests.sh execute --type=execution
+```
+
+- All tests for all commands:
+
+```bash
+./tests/run-tests.sh --all
+```
+
+- Initialize fixtures (first time):
+
+```bash
+cd tests/fixtures
+./init-fixtures.sh && ./validate-fixtures.sh
+```
+
+More: `tests/QUICK-START.md`, `tests/README.md`.
+
+### Develop the plugin locally (Claude Code)
+
+```bash
+make link       # Symlink into ~/.claude for development
+make test-link  # Verify linked version
+make unlink     # Remove the symlink
+```
+
+Requires: `jq`, `git-spice`.
+
+## Versioning & Releases
+
+- Update version files directly:
+
+```bash
+./scripts/update-version.sh 1.2.3
+```
+
+- Convenience targets (create a stacked branch, tag, and optionally push):
+
+```bash
+make bump-patch      # 1.2.3 -> 1.2.4 (no push)
+make release-patch   # bump + tag + push
+```
+
+Also see Make targets: `bump-minor`, `bump-major`, `release-minor`, `release-major`. Version badge reads from `.claude-plugin/plugin.json`.
 
 ## Contributing
 
