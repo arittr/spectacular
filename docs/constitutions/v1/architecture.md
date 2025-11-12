@@ -177,8 +177,7 @@ Spectacular **extends** the superpowers plugin, not replaces it.
 - `systematic-debugging` - Four-phase debugging framework
 - `requesting-code-review` - Dispatch code-reviewer after phases
 - `verification-before-completion` - Evidence before assertions
-- `using-git-worktrees` - Parallel task isolation
-- `subagent-driven-development` - Context-isolated task execution
+- `finishing-a-development-branch` - Complete work and choose next action
 
 **NEVER recreate superpowers workflows** - reference and invoke them instead.
 
