@@ -6,7 +6,7 @@
 
 **Spec-anchored development with automatic parallel execution for Claude Code.**
 
-Enable AI agents to autonomously implement complex features in hours instead of days - with correctness guarantees through spec anchoring and automatic quality gates.
+Enable AI agents to implement complex features autonomously over multi-hour runs with correctness guarantees through spec anchoring and automatic quality gates.
 
 >[!NOTE]
 >`/spectacular:execute` requires [git-spice](https://abhinav.github.io/git-spice/) for PR stacking. Support for Graphite coming soon!
