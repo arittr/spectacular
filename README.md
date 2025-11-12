@@ -8,7 +8,8 @@
 
 Enable AI agents to autonomously implement complex features in hours instead of days - with correctness guarantees through spec anchoring and automatic quality gates.
 
-> [!NOTE] > `/spectacular:execute` requires [git-spice](https://abhinav.github.io/git-spice/) for PR stacking. Support for Graphite coming soon!
+>[!NOTE]
+>`/spectacular:execute` requires [git-spice](https://abhinav.github.io/git-spice/) for PR stacking. Support for Graphite coming soon!
 
 ## Table of Contents
 
@@ -80,7 +81,7 @@ Every feature gets a comprehensive specification that serves as the unchanging a
 
 ```text
 ┌─────────────────────────────────────────────────────┐
-│  Feature Specification (spec.md)                    │
+│  Feature Specification (spec.md)                   │
 │  ┌─────────────────────────────────────────────┐    │
 │  │ Requirements                                │    │
 │  │ Architecture decisions                      │    │
