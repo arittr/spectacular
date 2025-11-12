@@ -134,7 +134,9 @@ Next steps:
 
 **Uses**:
 
-- `subagent-driven-development` skill for task execution
+- `executing-sequential-phase` skill for sequential phase orchestration
+- `executing-parallel-phase` skill for parallel phase orchestration
+- `phase-task-verification` skill for shared branch creation/verification
 - Fresh subagent per task with code review gates
 - Git worktrees for parallel execution
 - `finishing-a-development-branch` skill for completion
@@ -142,10 +144,10 @@ Next steps:
 
 **Flow**:
 
-1. Create feature branch with `gs branch create`
+1. Extract run ID from plan path
 2. For each phase:
-   - **Sequential**: Use `subagent-driven-development` in feature branch
-   - **Parallel**: Create worktrees, spawn agents in parallel, merge branches
+   - **Sequential**: `executing-sequential-phase` orchestrates tasks in shared worktree
+   - **Parallel**: `executing-parallel-phase` creates worktrees, spawns agents concurrently
 3. Complete with `finishing-a-development-branch` skill
 
 **Example**:
@@ -260,18 +262,28 @@ Models (src/lib/models/) - Prisma only, no business logic
 
 ---
 
-## Superpowers Skills Used
+## Skills Used
 
-These commands integrate the following superpowers skills:
+### Spectacular Skills
 
-- **`brainstorming`** - Refine requirements before spec generation
-- **`task-decomposition`** - Analyze dependencies and group into phases (custom skill)
-- **`subagent-driven-development`** - Task-level autonomous execution with code review gates
-- **`finishing-a-development-branch`** - Verify completion and submit
-- **`using-git-worktrees`** (concepts) - Worktree creation and isolation
-- **`dispatching-parallel-agents`** (concepts) - Parallel execution coordination
+- **`executing-sequential-phase`** - Orchestrates sequential phase execution with natural stacking
+- **`executing-parallel-phase`** - Orchestrates parallel phase execution with worktree isolation
+- **`phase-task-verification`** - Shared branch creation and verification logic
+- **`decomposing-tasks`** - Analyzes dependencies and groups into phases
+- **`writing-specs`** - Generates lean feature specifications
+- **`validating-setup-commands`** - Validates CLAUDE.md setup commands
+- **`understanding-cross-phase-stacking`** - Explains base branch inheritance
+- **`using-git-spice`** - Git-spice command reference and patterns
+- **`troubleshooting-execute`** - Error recovery for execution failures
 
-**Added Value**: Automatic dependency analysis, sequential/parallel phase detection, git-spice orchestration, worktree lifecycle management.
+### Superpowers Skills
+
+- **`brainstorming`** - Refines requirements before spec generation
+- **`requesting-code-review`** - Dispatches code review after each phase
+- **`verification-before-completion`** - Evidence-based completion verification
+- **`finishing-a-development-branch`** - Completes work and chooses next action
+
+**Architecture**: Orchestrator skills manage workflow lifecycle and dispatch Task tool with embedded execution instructions. Subagents receive focused ~150-line instructions (80% cognitive load reduction vs original 750-line monolithic skills).
 
 ---
 
@@ -412,7 +424,7 @@ Then run `/spectacular:init` again.
 
 **Cause**: Implementation has bugs.
 
-**Fix**: subagent-driven-development includes code review after each task, but bugs can slip through.
+**Fix**: Code review runs after each phase, but bugs can slip through.
 
 1. Review test failures
 2. Use `systematic-debugging` skill to investigate
