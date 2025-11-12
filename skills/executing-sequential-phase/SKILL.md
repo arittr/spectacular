@@ -66,9 +66,37 @@ echo "✅ Orchestrator location verified: Main repo root"
 - All operations use `git -C .worktrees/path` or `bash -c "cd path && cmd"`
 - This assertion catches upstream drift immediately
 
-### Step 1: Verify Setup in Main Worktree
+### Step 1: Verify Setup and Base Branch
 
-**Check and install dependencies from main repo (orchestrator never cd's):**
+**First, verify we're on the correct base branch for this phase:**
+
+```bash
+# Get current branch in main worktree
+CURRENT_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
+EXPECTED_BASE="{expected-base-branch}"  # From plan: previous phase's last task, or {runid}-main for Phase 1
+
+if [ "$CURRENT_BRANCH" != "$EXPECTED_BASE" ]; then
+  echo "⚠️  WARNING: Phase {phase-id} starting from unexpected branch"
+  echo "   Current: $CURRENT_BRANCH"
+  echo "   Expected: $EXPECTED_BASE"
+  echo ""
+  echo "This means the previous phase ended on the wrong branch."
+  echo "Possible causes:"
+  echo "- Code review or quality checks switched branches"
+  echo "- User manually checked out different branch"
+  echo "- Resume from interrupted execution"
+  echo ""
+  echo "To fix:"
+  echo "1. Verify previous phase completed: git log --oneline $EXPECTED_BASE"
+  echo "2. Switch to correct base: cd .worktrees/{runid}-main && git checkout $EXPECTED_BASE"
+  echo "3. Re-run /spectacular:execute"
+  exit 1
+fi
+
+echo "✅ Phase {phase-id} starting from correct base: $CURRENT_BRANCH"
+```
+
+**Then check and install dependencies from main repo (orchestrator never cd's):**
 
 ```bash
 # Check if dependencies installed in main worktree
@@ -87,6 +115,31 @@ fi
 **Why main worktree:** Sequential tasks were created during spec generation. All sequential phases share this worktree.
 
 **Red flag:** "Create phase-specific worktree" - NO. Sequential = shared worktree.
+
+### Step 1.5: Extract Phase Context (Before Dispatching)
+
+**Before spawning subagents, extract phase boundaries from plan:**
+
+The orchestrator already parsed the plan in execute.md Step 1. Extract:
+- Current phase number and name
+- Tasks in THIS phase (what TO implement)
+- Tasks in LATER phases (what NOT to implement)
+
+**Format for subagent context:**
+```
+PHASE CONTEXT:
+- Phase {current-phase-id}/{total-phases}: {phase-name}
+- This phase includes: Task {task-ids-in-this-phase}
+
+LATER PHASES (DO NOT IMPLEMENT):
+- Phase {next-phase}: {phase-name} - {task-summary}
+- Phase {next+1}: {phase-name} - {task-summary}
+...
+
+If implementing work beyond this phase's tasks, STOP and report scope violation.
+```
+
+**Why critical:** Spec describes WHAT to build (entire feature). Plan describes HOW/WHEN (phase breakdown). Subagents need both to avoid scope creep.
 
 ### Step 2: Execute Tasks Sequentially
 
@@ -223,12 +276,67 @@ CRITICAL:
 **After all tasks complete (verify from main repo):**
 
 ```bash
-# Verify stack using bash subshell (orchestrator stays in main repo)
-bash -c "cd .worktrees/{runid}-main && gs log short"
-# Should show: task-1 → task-2 → task-3 (linear chain)
+# Display and verify stack using bash subshell (orchestrator stays in main repo)
+bash <<'EOF'
+cd .worktrees/{runid}-main
+
+echo "📋 Stack after sequential phase:"
+gs log short
+echo ""
+
+# Verify stack integrity (each task has unique commit)
+echo "🔍 Verifying stack integrity..."
+TASK_BRANCHES=( {array-of-branch-names} )
+STACK_VALID=1
+declare -A SEEN_COMMITS
+
+for BRANCH in "${TASK_BRANCHES[@]}"; do
+  if ! git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
+    echo "❌ ERROR: Branch '$BRANCH' not found"
+    STACK_VALID=0
+    break
+  fi
+
+  BRANCH_SHA=$(git rev-parse "$BRANCH")
+
+  # Check if this commit SHA was already seen
+  if [ -n "${SEEN_COMMITS[$BRANCH_SHA]}" ]; then
+    echo "❌ ERROR: Stack integrity violation"
+    echo "   Branch '$BRANCH' points to commit $BRANCH_SHA"
+    echo "   But '${SEEN_COMMITS[$BRANCH_SHA]}' already points to that commit"
+    echo ""
+    echo "This means one task created no new commits."
+    echo "Possible causes:"
+    echo "- Task implementation had no changes"
+    echo "- Quality checks blocked commit"
+    echo "- gs branch create failed silently"
+    STACK_VALID=0
+    break
+  fi
+
+  SEEN_COMMITS[$BRANCH_SHA]="$BRANCH"
+  echo "  ✓ $BRANCH @ $BRANCH_SHA"
+done
+
+if [ $STACK_VALID -eq 0 ]; then
+  echo ""
+  echo "❌ Stack verification FAILED"
+  echo ""
+  echo "To investigate:"
+  echo "1. Check task branch commits: git log --oneline \$BRANCH"
+  echo "2. Review subagent output for failed task"
+  echo "3. Check for quality check failures (test/lint/build)"
+  echo "4. Fix and re-run /spectacular:execute"
+  exit 1
+fi
+
+echo "✅ Stack integrity verified - all tasks have unique commits"
+EOF
 ```
 
 **Each `gs branch create` automatically stacked on the previous task's branch.**
+
+**Verification ensures:** Each task created a unique commit (no empty branches or duplicates).
 
 **Red flag:** "Run `gs upstack onto` to ensure stacking" - NO. Already stacked naturally.
 
@@ -294,7 +402,30 @@ Use `requesting-code-review` skill, then parse results STRICTLY.
 1. **Dispatch code review:**
    ```
    Skill: requesting-code-review
-   Context: WORKTREE, PHASE, TASKS, BASE_BRANCH, SPEC, PLAN
+
+   Context provided to reviewer:
+   - WORKTREE: .worktrees/{runid}-main
+   - PHASE: {phase-number}
+   - TASKS: {task-list}
+   - BASE_BRANCH: {base-branch-name}
+   - SPEC: specs/{run-id}-{feature-slug}/spec.md
+   - PLAN: specs/{run-id}-{feature-slug}/plan.md (for phase boundary validation)
+
+   **CRITICAL - EXHAUSTIVE FIRST-PASS REVIEW:**
+
+   This is your ONLY opportunity to find issues. Re-review is for verifying fixes, NOT discovering new problems.
+
+   Check EVERYTHING in this single review:
+   □ Implementation correctness - logic bugs, edge cases, error handling, race conditions
+   □ Test correctness - expectations match actual behavior, coverage is complete, no false positives
+   □ Cross-file consistency - logic coherent across all files, no contradictions
+   □ Architectural soundness - follows patterns, proper separation of concerns, no coupling issues
+   □ Scope adherence - implements ONLY Phase {phase-number} work, no later-phase implementations
+   □ Constitution compliance - follows all project standards and conventions
+
+   Find ALL issues NOW. If you catch yourself thinking "I'll check that in re-review" - STOP. Check it NOW.
+
+   Binary verdict required: "Ready to merge? Yes" (only if EVERYTHING passes) or "Ready to merge? No" (list ALL issues found)
    ```
 
 2. **Parse "Ready to merge?" field:**
