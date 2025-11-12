@@ -329,6 +329,72 @@ No degradation. No drift.
 3. **Validation anchor**: Code review compares against the unchanging spec
 4. **Architecture compliance**: Constitution always in context, patterns always followed
 
+### Orchestration Architecture: Cognitive Load Reduction
+
+Spectacular uses an orchestrator-with-embedded-instructions architecture to minimize cognitive overhead for task subagents:
+
+**Traditional monolithic approach:**
+```
+┌─────────────────────────────────────────────┐
+│ Single 750-line skill file                  │
+│ ┌─────────────────────────────────────────┐ │
+│ │ Setup logic (200 lines)                 │ │
+│ │ Dispatch coordination (150 lines)       │ │
+│ │ Task execution instructions (200 lines) │ │ ← Subagent needs this
+│ │ Verification logic (100 lines)          │ │
+│ │ Code review orchestration (100 lines)   │ │
+│ └─────────────────────────────────────────┘ │
+│                                             │
+│ Subagent must parse all 750 lines          │
+│ to find the ~200 lines of task instructions│
+└─────────────────────────────────────────────┘
+```
+
+**Spectacular's layered approach:**
+```
+┌─────────────────────────────────────────────┐
+│ Orchestrator Skill (464-850 lines)         │
+│ ┌─────────────────────────────────────────┐ │
+│ │ Setup logic                             │ │
+│ │ Dispatch coordination                   │ │
+│ │ Code review orchestration               │ │
+│ └─────────────────────────────────────────┘ │
+│           ↓ Dispatches Task tool            │
+│ ┌─────────────────────────────────────────┐ │
+│ │ Embedded Instructions (~150 lines)      │ │ ← Subagent receives only this
+│ │ • Phase boundaries                      │ │
+│ │ • Spec reading                          │ │
+│ │ • Implementation steps                  │ │
+│ │ • Quality checks                        │ │
+│ │ • Calls: Skill(phase-task-verification) │ │
+│ └─────────────────────────────────────────┘ │
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│ Verification Skill (92 lines)               │
+│ • Git operations (add, branch, verify)      │
+│ • Shared by sequential + parallel           │
+│ • Called by subagents via Skill tool        │
+└─────────────────────────────────────────────┘
+```
+
+**Benefits:**
+
+1. **80% cognitive load reduction**: Subagents parse ~150 lines instead of 750
+2. **Focus**: Task instructions separated from orchestration complexity
+3. **Maintainability**: Can improve orchestration without affecting task execution
+4. **DRY**: Shared verification skill eliminates duplication
+
+**How it works:**
+
+- Orchestrators (`executing-sequential-phase`, `executing-parallel-phase`) manage workflow lifecycle
+- Task tool dispatched with embedded execution instructions (~150 lines)
+- Subagent receives focused context: phase boundaries, spec, implementation steps
+- Subagent calls `phase-task-verification` skill for branch creation
+- Orchestrator handles code review, stacking, cleanup
+
+This architecture enables subagents to focus on implementation without drowning in orchestration logic.
+
 ### How Automatic Parallelization Works
 
 #### File Dependency Analysis
