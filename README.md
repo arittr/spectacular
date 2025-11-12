@@ -81,7 +81,7 @@ Every feature gets a comprehensive specification that serves as the unchanging a
 
 ```text
 ┌─────────────────────────────────────────────────────┐
-│  Feature Specification (spec.md)                   │
+│  Feature Specification (spec.md)                    │
 │  ┌─────────────────────────────────────────────┐    │
 │  │ Requirements                                │    │
 │  │ Architecture decisions                      │    │
