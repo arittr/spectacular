@@ -118,7 +118,7 @@ function checkForUpdates() {
     });
 
     if (status.includes('behind')) {
-      return 'Updates available! Run: cd ~/.claude/plugins/cache/spectacular && git pull';
+      return `Updates available! Run: cd ${PLUGIN_DIR} && git pull`;
     }
   } catch (error) {
     // Ignore errors (network timeout, not a git repo, etc.)
@@ -131,45 +131,65 @@ function checkForUpdates() {
  * Bootstrap command - show setup and list skills/commands
  */
 function bootstrap() {
-  console.log('# Spectacular for Codex\n');
+  console.log('# Spectacular Bootstrap for Codex');
+  console.log('# ================================');
+  console.log('');
 
   // Check for updates
   const updateMessage = checkForUpdates();
   if (updateMessage) {
-    console.log(`⚠️  ${updateMessage}\n`);
+    console.log('## Update Available');
+    console.log('');
+    console.log(`⚠️  ${updateMessage}`);
+    console.log('');
+    console.log('---');
+    console.log('');
   }
 
-  console.log('Spectacular enables spec-anchored development with automatic parallel task execution.\n');
-
-  // List commands
-  const commands = findCommands();
-  console.log(`## Available Commands (${commands.length})\n`);
-  console.log('Run commands with: `~/.claude/plugins/cache/spectacular/.codex/spectacular-codex use-command <name>`\n');
-
-  for (const cmd of commands) {
-    console.log(`- **${cmd.name}**: ${cmd.description}`);
+  // Show bootstrap instructions
+  const bootstrapFile = path.join(PLUGIN_DIR, '.codex', 'spectacular-bootstrap.md');
+  if (fs.existsSync(bootstrapFile)) {
+    console.log('## Bootstrap Instructions:');
+    console.log('');
+    try {
+      const content = fs.readFileSync(bootstrapFile, 'utf8');
+      console.log(content);
+    } catch (error) {
+      console.log(`Error reading bootstrap file: ${error.message}`);
+    }
+    console.log('');
+    console.log('---');
+    console.log('');
   }
 
-  // List skills
-  const skills = findSkillsInDir(SKILLS_DIR, 'spectacular:');
-  console.log(`\n## Available Skills (${skills.length})\n`);
-  console.log('Load skills with: `~/.claude/plugins/cache/spectacular/.codex/spectacular-codex use-skill <name>`\n');
+  // List available commands
+  console.log('## Available Commands:');
+  console.log('');
+  findCommandsCommand();
+  console.log('');
+  console.log('---');
+  console.log('');
 
-  for (const skill of skills) {
-    console.log(`- **${skill.name}**: ${skill.description}`);
-  }
-
-  // Instructions
-  console.log('\n## Using Spectacular in Codex\n');
-  console.log('**Commands** are workflow entry points (like /spectacular:spec, /spectacular:execute).');
-  console.log('**Skills** are reusable process documentation (like decomposing-tasks, writing-specs).\n');
-  console.log('To use a command: `use-command <name>` - This shows you the full workflow instructions.');
-  console.log('To use a skill: `use-skill <name>` - This shows you the process documentation.\n');
+  // List available skills
+  console.log('## Available Skills:');
+  console.log('');
+  findSkillsCommand();
+  console.log('');
+  console.log('---');
+  console.log('');
 
   // Auto-load using-spectacular skill
-  console.log('---\n');
-  console.log('**Loading spectacular:using-spectacular skill (mandatory workflow):**\n');
+  console.log('## Auto-loading spectacular:using-spectacular skill:');
+  console.log('');
   useSkill('spectacular:using-spectacular');
+  console.log('');
+  console.log('---');
+  console.log('');
+  console.log('# Bootstrap Complete!');
+  console.log('# You now have access to all spectacular commands and skills.');
+  console.log('# Use "spectacular-codex use-skill <skill>" to load and apply skills.');
+  console.log('# Use "spectacular-codex use-command <command>" to see command instructions.');
+  console.log('# Remember: If a spectacular skill applies to your task, you MUST use it!');
 }
 
 /**
