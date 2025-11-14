@@ -16,13 +16,13 @@ Spectacular enables spec-anchored development with automatic parallel task execu
 Clone the spectacular repository to `~/.codex/spectacular`:
 
 ```bash
-git clone https://github.com/drewritter/spectacular.git ~/.codex/spectacular
+git clone https://github.com/arittr/spectacular.git ~/.codex/spectacular
 ```
 
 Alternatively, if you prefer a different location:
 
 ```bash
-git clone https://github.com/drewritter/spectacular.git /path/to/spectacular
+git clone https://github.com/arittr/spectacular.git /path/to/spectacular
 ```
 
 ### 2. Update AGENTS.md
@@ -72,6 +72,7 @@ Test the installation by running the bootstrap command:
 ```
 
 You should see:
+
 - List of available commands (init, spec, plan, execute)
 - List of available skills (decomposing-tasks, writing-specs, etc.)
 - Auto-loaded spectacular:using-spectacular skill
@@ -86,6 +87,7 @@ In your project directory, run:
 ```
 
 Codex will use the `spectacular:using-spectacular` skill to guide you through:
+
 - Adding required CLAUDE.md sections
 - Setting up git-spice
 - Configuring development commands
@@ -118,18 +120,21 @@ codex
 ## How Spectacular Works in Codex
 
 **At session start:**
+
 1. Codex reads your `~/.codex/AGENTS.md`
 2. Runs `spectacular-codex bootstrap`
 3. Loads all available commands and skills
 4. Auto-loads the `spectacular:using-spectacular` skill
 
 **During workflows:**
+
 1. You describe what you want to do
 2. Codex identifies relevant spectacular skills/commands
 3. Codex follows the skill instructions
 4. Work happens in your project using git-spice and worktrees
 
 **Key difference from Claude Code:**
+
 - In Claude Code: You use `/spectacular:*` slash commands
 - In Codex: You describe what you want, Codex uses spectacular skills automatically
 
@@ -226,6 +231,6 @@ If you've used spectacular in Claude Code, note these differences:
 
 ## Support
 
-- Report issues: https://github.com/drewritter/spectacular/issues
-- Documentation: https://github.com/drewritter/spectacular
-- superpowers: https://github.com/obra/superpowers
+- Report issues: <https://github.com/arittr/spectacular/issues>
+- Documentation: <https://github.com/arittr/spectacular>
+- superpowers: <https://github.com/obra/superpowers>
