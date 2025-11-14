@@ -1,0 +1,290 @@
+#!/usr/bin/env node
+
+/**
+ * spectacular-codex: CLI tool for Codex integration
+ *
+ * Commands:
+ *   bootstrap        - Show setup info, list available commands/skills
+ *   use-skill <name> - Output a skill's content
+ *   use-command <name> - Output a command's content
+ *   find-skills      - List all available skills
+ *   find-commands    - List all available commands
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+// Determine plugin installation directory
+const PLUGIN_DIR = path.resolve(__dirname, '..');
+const SKILLS_DIR = path.join(PLUGIN_DIR, 'skills');
+const COMMANDS_DIR = path.join(PLUGIN_DIR, 'commands');
+
+/**
+ * Extract frontmatter from markdown file
+ */
+function extractFrontmatter(content) {
+  const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
+  const match = content.match(frontmatterRegex);
+  if (!match) return {};
+
+  const frontmatter = {};
+  const lines = match[1].split('\n');
+
+  for (const line of lines) {
+    const [key, ...valueParts] = line.split(':');
+    if (key && valueParts.length) {
+      const value = valueParts.join(':').trim();
+      frontmatter[key.trim()] = value;
+    }
+  }
+
+  return frontmatter;
+}
+
+/**
+ * Find all skills in a directory (recursive)
+ */
+function findSkillsInDir(dir, prefix = '') {
+  const skills = [];
+
+  if (!fs.existsSync(dir)) return skills;
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+
+    const skillPath = path.join(dir, entry.name, 'SKILL.md');
+    if (fs.existsSync(skillPath)) {
+      const content = fs.readFileSync(skillPath, 'utf8');
+      const frontmatter = extractFrontmatter(content);
+
+      skills.push({
+        name: prefix + entry.name,
+        description: frontmatter.description || '(no description)',
+        path: skillPath,
+        frontmatter
+      });
+    }
+  }
+
+  return skills;
+}
+
+/**
+ * Find all commands
+ */
+function findCommands() {
+  const commands = [];
+
+  if (!fs.existsSync(COMMANDS_DIR)) return commands;
+
+  const entries = fs.readdirSync(COMMANDS_DIR);
+
+  for (const entry of entries) {
+    if (!entry.endsWith('.md')) continue;
+
+    const commandPath = path.join(COMMANDS_DIR, entry);
+    const content = fs.readFileSync(commandPath, 'utf8');
+    const frontmatter = extractFrontmatter(content);
+
+    const name = path.basename(entry, '.md');
+    commands.push({
+      name: name,
+      description: frontmatter.description || '(no description)',
+      path: commandPath,
+      frontmatter
+    });
+  }
+
+  return commands;
+}
+
+/**
+ * Check for updates (safe git fetch with timeout)
+ */
+function checkForUpdates() {
+  try {
+    execSync('git fetch origin --quiet', {
+      cwd: PLUGIN_DIR,
+      timeout: 3000,
+      stdio: 'ignore'
+    });
+
+    const status = execSync('git status -uno', {
+      cwd: PLUGIN_DIR,
+      encoding: 'utf8'
+    });
+
+    if (status.includes('behind')) {
+      return 'Updates available! Run: cd ~/.claude/plugins/cache/spectacular && git pull';
+    }
+  } catch (error) {
+    // Ignore errors (network timeout, not a git repo, etc.)
+  }
+
+  return null;
+}
+
+/**
+ * Bootstrap command - show setup and list skills/commands
+ */
+function bootstrap() {
+  console.log('# Spectacular for Codex\n');
+
+  // Check for updates
+  const updateMessage = checkForUpdates();
+  if (updateMessage) {
+    console.log(`⚠️  ${updateMessage}\n`);
+  }
+
+  console.log('Spectacular enables spec-anchored development with automatic parallel task execution.\n');
+
+  // List commands
+  const commands = findCommands();
+  console.log(`## Available Commands (${commands.length})\n`);
+  console.log('Run commands with: `~/.claude/plugins/cache/spectacular/.codex/spectacular-codex use-command <name>`\n');
+
+  for (const cmd of commands) {
+    console.log(`- **${cmd.name}**: ${cmd.description}`);
+  }
+
+  // List skills
+  const skills = findSkillsInDir(SKILLS_DIR, 'spectacular:');
+  console.log(`\n## Available Skills (${skills.length})\n`);
+  console.log('Load skills with: `~/.claude/plugins/cache/spectacular/.codex/spectacular-codex use-skill <name>`\n');
+
+  for (const skill of skills) {
+    console.log(`- **${skill.name}**: ${skill.description}`);
+  }
+
+  // Instructions
+  console.log('\n## Using Spectacular in Codex\n');
+  console.log('**Commands** are workflow entry points (like /spectacular:spec, /spectacular:execute).');
+  console.log('**Skills** are reusable process documentation (like decomposing-tasks, writing-specs).\n');
+  console.log('To use a command: `use-command <name>` - This shows you the full workflow instructions.');
+  console.log('To use a skill: `use-skill <name>` - This shows you the process documentation.\n');
+
+  // Auto-load using-spectacular skill
+  console.log('---\n');
+  console.log('**Loading spectacular:using-spectacular skill (mandatory workflow):**\n');
+  useSkill('spectacular:using-spectacular');
+}
+
+/**
+ * Use a skill - output its content
+ */
+function useSkill(name) {
+  // Remove 'spectacular:' prefix if provided
+  const skillName = name.replace(/^spectacular:/, '');
+
+  const skills = findSkillsInDir(SKILLS_DIR);
+  const skill = skills.find(s => s.name === `spectacular:${skillName}` || s.name === skillName);
+
+  if (!skill) {
+    console.error(`Error: Skill '${name}' not found.`);
+    console.error('\nAvailable skills:');
+    for (const s of skills) {
+      console.error(`  - ${s.name}`);
+    }
+    process.exit(1);
+  }
+
+  const content = fs.readFileSync(skill.path, 'utf8');
+  console.log(content);
+}
+
+/**
+ * Use a command - output its content
+ */
+function useCommand(name) {
+  const commands = findCommands();
+  const command = commands.find(c => c.name === name);
+
+  if (!command) {
+    console.error(`Error: Command '${name}' not found.`);
+    console.error('\nAvailable commands:');
+    for (const c of commands) {
+      console.error(`  - ${c.name}`);
+    }
+    process.exit(1);
+  }
+
+  const content = fs.readFileSync(command.path, 'utf8');
+  console.log(content);
+}
+
+/**
+ * List all skills
+ */
+function findSkillsCommand() {
+  const skills = findSkillsInDir(SKILLS_DIR, 'spectacular:');
+
+  console.log('# Available Skills\n');
+  for (const skill of skills) {
+    console.log(`## ${skill.name}\n`);
+    console.log(`${skill.description}\n`);
+    if (skill.frontmatter.when_to_use) {
+      console.log(`**When to use:** ${skill.frontmatter.when_to_use}\n`);
+    }
+  }
+}
+
+/**
+ * List all commands
+ */
+function findCommandsCommand() {
+  const commands = findCommands();
+
+  console.log('# Available Commands\n');
+  for (const cmd of commands) {
+    console.log(`## ${cmd.name}\n`);
+    console.log(`${cmd.description}\n`);
+  }
+}
+
+// Main CLI dispatcher
+const command = process.argv[2];
+const arg = process.argv[3];
+
+switch (command) {
+  case 'bootstrap':
+    bootstrap();
+    break;
+
+  case 'use-skill':
+    if (!arg) {
+      console.error('Error: use-skill requires a skill name');
+      process.exit(1);
+    }
+    useSkill(arg);
+    break;
+
+  case 'use-command':
+    if (!arg) {
+      console.error('Error: use-command requires a command name');
+      process.exit(1);
+    }
+    useCommand(arg);
+    break;
+
+  case 'find-skills':
+    findSkillsCommand();
+    break;
+
+  case 'find-commands':
+    findCommandsCommand();
+    break;
+
+  default:
+    console.error('Usage: spectacular-codex <command> [args]');
+    console.error('');
+    console.error('Commands:');
+    console.error('  bootstrap        - Show setup info and list commands/skills');
+    console.error('  use-skill <name> - Output skill content');
+    console.error('  use-command <name> - Output command content');
+    console.error('  find-skills      - List all skills');
+    console.error('  find-commands    - List all commands');
+    process.exit(1);
+}

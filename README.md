@@ -8,8 +8,9 @@
 
 Enable AI agents to implement complex features autonomously over multi-hour runs with correctness guarantees through spec anchoring and automatic quality gates.
 
->[!NOTE]
->`/spectacular:execute` requires [git-spice](https://abhinav.github.io/git-spice/) for PR stacking. Support for Graphite coming soon!
+Inspired and powered by [Superpowers](https://github.com/obra/superpowers).
+
+> [!NOTE] >`/spectacular:execute` requires [git-spice](https://abhinav.github.io/git-spice/) for PR stacking. Support for Graphite coming soon!
 
 ## Table of Contents
 
@@ -690,6 +691,77 @@ The time estimates shown throughout this README (12 min, 36 min, etc.) assume:
 - Exploratory work needs iteration
 
 Real-world example: A 40-minute estimate becomes 60-80 minutes actual, but still faster than 120+ minutes sequential.
+
+## Platform Support
+
+Spectacular is available for both **Claude Code** and **Codex CLI**.
+
+### Claude Code (Primary Platform)
+
+Install via the plugin marketplace:
+
+```bash
+/plugin marketplace add arittr/spectacular
+/plugin install spectacular@spectacular
+```
+
+Use slash commands:
+
+- `/spectacular:spec` - Generate specification
+- `/spectacular:plan` - Create execution plan
+- `/spectacular:execute` - Run with parallel orchestration
+- `/spectacular:init` - Initialize project
+
+See [Installation & Quick Start](#installation--quick-start) for full setup.
+
+### Codex CLI (Experimental)
+
+Spectacular is available for Codex but requires manual setup.
+
+**Manual Setup:**
+
+See [.codex/INSTALL.md](.codex/INSTALL.md) for detailed instructions.
+
+**Usage:**
+
+In Codex, spectacular commands and skills are loaded automatically at session start. Instead of slash commands, use natural language:
+
+```
+# Generate specification
+"I need a spec for user authentication with magic links"
+
+# Create plan
+"Create an implementation plan from specs/abc123-user-auth/spec.md"
+
+# Execute plan
+"Execute the plan at specs/abc123-user-auth/plan.md"
+```
+
+Codex will use spectacular skills to guide the workflow.
+
+**Key Differences:**
+
+| Feature         | Claude Code                       | Codex CLI                   |
+| --------------- | --------------------------------- | --------------------------- |
+| **Commands**    | Slash commands (`/spectacular:*`) | Natural language            |
+| **Skills**      | Automatic loading                 | Via CLI tool                |
+| **Subagents**   | Task tool                         | TBD (manual or MCP wrapper) |
+| **Integration** | Plugin system                     | AGENTS.md + CLI script      |
+
+**Codex Limitations:**
+
+- **Parallel execution** may require manual worktree management or future MCP wrapper
+- **Subagent dispatch** not yet automated (skills document methodology to follow manually)
+- **Quality gates** work but may need manual test execution
+
+**Full Codex documentation:** See [.codex/INSTALL.md](.codex/INSTALL.md)
+
+### Which Should I Use?
+
+- **Claude Code**: Full automation, parallel execution, subagent orchestration
+- **Codex CLI**: Access to spectacular methodology, manual adaptation required
+
+**Recommendation:** Use Claude Code for production workflows. Use Codex for learning the methodology or when Claude Code isn't available.
 
 ## Complete Workflow Example
 
