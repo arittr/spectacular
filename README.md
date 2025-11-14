@@ -10,7 +10,8 @@ Enable AI agents to implement complex features autonomously over multi-hour runs
 
 Inspired and powered by [Superpowers](https://github.com/obra/superpowers).
 
-> [!NOTE] >`/spectacular:execute` requires [git-spice](https://abhinav.github.io/git-spice/) for PR stacking. Support for Graphite coming soon!
+>[!NOTE]
+>`/spectacular:execute` requires [git-spice](https://abhinav.github.io/git-spice/) for PR stacking. Support for Graphite coming soon!
 
 ## Table of Contents
 
@@ -714,13 +715,13 @@ Use slash commands:
 
 See [Installation & Quick Start](#installation--quick-start) for full setup.
 
-### Codex CLI (Experimental)
+### Codex CLI (beta)
 
-Spectacular is available for Codex but requires manual setup.
+Tell Codex to:
 
-**Manual Setup:**
-
-See [.codex/INSTALL.md](.codex/INSTALL.md) for detailed instructions.
+```
+fetch https://raw.githubusercontent.com/arittr/spectacular/refs/heads/main/.codex/INSTALL.md and follow the instructions.
+```
 
 **Usage:**
 
