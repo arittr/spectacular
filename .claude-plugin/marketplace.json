@@ -9,7 +9,7 @@
     {
       "name": "spectacular",
       "description": "Spectacular skills/commands library for spec-anchored development and parallel task execution",
-      "version": "2.1.0-codex.beta1",
+      "version": "2.1.0-codex.beta2",
       "source": "./",
       "author": {
         "name": "Drew Ritter",

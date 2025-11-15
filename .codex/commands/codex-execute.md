@@ -168,58 +168,213 @@ fi
 
 ### Step 1: Read and Parse Plan
 
-Read the plan file and extract:
-- Feature name
-- All phases (with strategy: sequential or parallel)
-- All tasks within each phase
+**Read the plan.md file:**
 
-**For each task, extract and format:**
-- Task ID and name
-- Files to modify (explicit paths)
-- Acceptance criteria (bullet points)
-- Dependencies (which tasks must complete first)
+Use the Read tool to read the plan file at the path provided by the user.
 
-**Store extracted task info for MCP server** (saves tokens in prompts):
+**Parse the plan into a structured object using these steps:**
 
+#### 1.1: Extract Header Information
+
+From the plan markdown, extract:
+
+```bash
+# Extract title (first h1 heading)
+# Pattern: # Implementation Plan: {title}
+TITLE=$(grep -m 1 "^# " plan.md | sed 's/^# //')
+
+# Extract runId (already have from Step 0a)
+# Pattern: Run ID: {runId}
+
+# Extract feature slug (already have from Step 0a, but verify)
+# Pattern: Feature: {feature-slug}
+FEATURE_SLUG=$(grep -m 1 "^Feature:" plan.md | sed 's/^Feature: *//')
 ```
-Task 4.2:
-Name: Integrate prompts module into generator
-Files: - src/generator.ts - src/types.ts
-Acceptance Criteria: - Import PromptService from prompts module - Replace manual prompt construction with PromptService.getCommitPrompt() - Update tests to mock PromptService - All tests pass
-Dependencies: Task 4.1 (fallback logic removed)
+
+#### 1.2: Parse Phases
+
+Parse phases using this pattern:
+
+**Phase header format:**
+```
+## Phase {N}: {Phase Name} (Parallel|Sequential)
 ```
 
-Verify plan structure:
-- ✅ Has phases with clear strategies
-- ✅ All tasks have files specified
-- ✅ All tasks have acceptance criteria
-- ✅ Dependencies make sense
+**For each phase:**
+1. Extract phase number (N)
+2. Extract phase name
+3. Extract strategy (Parallel or Sequential)
+4. Extract all tasks within this phase (until next phase header or end of file)
 
-**Build a structured plan object** for MCP server:
+**Example parsing logic:**
+
+```python
+import re
+
+# Find all phase headers
+phase_pattern = r'^##\s*Phase\s+(\d+)[\s:–-]+(.+?)\s*\((Parallel|Sequential)\)\s*$'
+phases = []
+
+for match in re.finditer(phase_pattern, plan_content, re.MULTILINE | re.IGNORECASE):
+    phase_id = match.group(1)
+    phase_name = match.group(2).strip()
+    strategy = match.group(3).lower()  # "parallel" or "sequential"
+
+    # Extract phase content (from this match to next phase or EOF)
+    phase_start = match.end()
+    # Parse tasks within this phase...
+```
+
+#### 1.3: Parse Tasks Within Each Phase
+
+**Task header format:**
+```
+### Task {N}-{M}: {Task Name}
+**Description:** {description}
+**Files:**
+- {file1}
+- {file2}
+
+**Acceptance Criteria:**
+- {criterion1}
+- {criterion2}
+
+**Dependencies:** {task-id1}, {task-id2} | None
+```
+
+**For each task:**
+
+1. **Extract task ID and name:**
+   - Pattern: `### Task {N}-{M}: {Task Name}`
+   - Task ID: `{N}-{M}` (e.g., "1-1", "2-3")
+   - Task name: Everything after the colon
+
+2. **Extract description:**
+   - Pattern: `**Description:** {text}`
+   - Single line after the header
+
+3. **Extract files (list):**
+   - Pattern: `**Files:**` followed by list items
+   - List items start with `- ` or `* `
+   - Capture until next section header (`**`)
+
+4. **Extract acceptance criteria (list):**
+   - Pattern: `**Acceptance Criteria:**` followed by list items
+   - Same list parsing as files
+
+5. **Extract dependencies:**
+   - Pattern: `**Dependencies:** {text}`
+   - Parse comma-separated task IDs
+   - If "None", set to empty array
+
+**Example parsing logic:**
+
+```python
+task_pattern = r'^###\s*Task\s+([\d.-]+)[\s:–-]+(.+)\s*$'
+
+for task_match in re.finditer(task_pattern, phase_content, re.MULTILINE):
+    task_id = task_match.group(1).replace('.', '-')  # Convert 1.1 to 1-1
+    task_name = task_match.group(2).strip()
+
+    # Extract task content (from this match to next task or EOF)
+    task_content = get_task_content(phase_content, task_match)
+
+    # Parse description
+    desc_match = re.search(r'\*\*Description:\*\*\s*(.+)', task_content)
+    description = desc_match.group(1).strip() if desc_match else ""
+
+    # Parse files (list items after **Files:**)
+    files = extract_list_items(task_content, 'Files')
+
+    # Parse acceptance criteria
+    acceptance_criteria = extract_list_items(task_content, 'Acceptance Criteria')
+
+    # Parse dependencies
+    deps_match = re.search(r'\*\*Dependencies:\*\*\s*(.+)', task_content)
+    deps_raw = deps_match.group(1).strip() if deps_match else "None"
+    dependencies = [] if deps_raw.lower() == 'none' else [d.strip() for d in deps_raw.split(',')]
+```
+
+**Helper function to extract list items:**
+
+```python
+def extract_list_items(content, section_name):
+    items = []
+    # Find section header and capture lines starting with - or *
+    section_pattern = f'\\*\\*{section_name}:\\*\\*\\s*\\n([\\s\\S]*?)(?=\\n\\*\\*|$)'
+    match = re.search(section_pattern, content)
+
+    if match:
+        list_content = match.group(1)
+        # Extract list items
+        for line in list_content.split('\n'):
+            if line.strip().startswith(('-', '*')):
+                item = line.strip()[1:].strip()  # Remove leading - or *
+                if item:
+                    items.append(item)
+
+    return items
+```
+
+#### 1.4: Build Structured Plan Object
+
+After parsing all phases and tasks, build this JSON structure:
 
 ```json
 {
   "runId": "{run-id}",
   "featureSlug": "{feature-slug}",
+  "title": "{title}",
   "phases": [
     {
-      "id": "1",
-      "name": "Phase 1 Name",
+      "id": 1,
+      "name": "Foundation",
       "strategy": "sequential",
       "tasks": [
         {
-          "id": "1.1",
-          "name": "Task Name",
-          "description": "Task description",
-          "files": ["src/file1.ts", "src/file2.ts"],
-          "acceptanceCriteria": ["Criterion 1", "Criterion 2"],
+          "id": "1-1",
+          "name": "Database Schema",
+          "description": "Create user and session tables with Prisma",
+          "files": ["prisma/schema.prisma", "prisma/migrations/001_init.sql"],
+          "acceptanceCriteria": [
+            "User table with id, email, created_at",
+            "Session table with id, user_id, token",
+            "Migration runs successfully"
+          ],
           "dependencies": []
+        },
+        {
+          "id": "1-2",
+          "name": "Authentication Service",
+          "description": "Implement JWT-based authentication",
+          "files": ["src/auth/service.ts", "src/auth/types.ts"],
+          "acceptanceCriteria": [
+            "generateToken() creates valid JWT",
+            "verifyToken() validates tokens",
+            "Tests pass"
+          ],
+          "dependencies": ["1-1"]
         }
       ]
+    },
+    {
+      "id": 2,
+      "name": "API Routes",
+      "strategy": "parallel",
+      "tasks": [...]
     }
   ]
 }
 ```
+
+**Verify plan structure:**
+- ✅ Has phases with clear strategies
+- ✅ All tasks have files specified
+- ✅ All tasks have acceptance criteria
+- ✅ Dependencies reference valid task IDs
+- ✅ Parallel phases have independent tasks (no circular dependencies)
+
+**Store this structured object** - you will pass it to the MCP tool in Step 2.
 
 ### Step 1.5: Validate Setup Commands (REQUIRED)
 
@@ -295,33 +450,28 @@ Code review frequency: {REVIEW_FREQUENCY}
 
 ### Step 2: Execute via MCP Server
 
-**Call the spectacular_execute MCP tool with structured plan object:**
+**Call the `spectacular_execute` MCP tool with the structured plan object you built in Step 1.**
 
-**CRITICAL:** The MCP server does NOT parse plan.md. You must pass a fully structured plan object.
+**CRITICAL:** The MCP server does NOT parse plan.md. You must pass the fully structured plan object from Step 1.4.
 
-```json
-{
-  "tool": "spectacular_execute",
-  "plan": {
-    "runId": "{run-id}",
-    "featureSlug": "{feature-slug}",
-    "phases": [
-      {
-        "id": "1",
-        "name": "Foundation",
-        "strategy": "sequential",
-        "tasks": [...]
-      },
-      {
-        "id": "2",
-        "name": "Parallel Work",
-        "strategy": "parallel",
-        "tasks": [...]
-      }
-    ]
-  },
-  "base_branch": "main"
-}
+**Tool invocation:**
+
+Use the `spectacular_execute` MCP tool (configured in `~/.codex/mcp-servers.json`) with these arguments:
+
+- **plan** (required): The structured plan object from Step 1.4 containing:
+  - `runId`: The 6-character hex run ID
+  - `featureSlug`: The feature slug (e.g., "magic-link-auth")
+  - `title`: The plan title
+  - `phases`: Array of phase objects with tasks
+
+- **base_branch** (optional): The base branch for worktree creation (defaults to "main")
+
+**Example invocation:**
+
+```
+Call the spectacular_execute MCP tool with:
+- plan: <the structured plan object from Step 1.4>
+- base_branch: "main"
 ```
 
 **The MCP server will:**
@@ -330,52 +480,50 @@ Code review frequency: {REVIEW_FREQUENCY}
 3. Execute each phase according to strategy:
    - Sequential: Tasks run one-by-one in main worktree
    - Parallel: Each task gets isolated worktree, runs simultaneously
-4. Spawn Codex CLI subagents with embedded skill instructions
+4. Spawn Codex CLI subagents with embedded skill instructions (using `codex run --dangerously-bypass-approvals-and-sandbox --yolo`)
 5. Track completion via git branches
-6. Run code reviews based on REVIEW_FREQUENCY
+6. Run code reviews based on REVIEW_FREQUENCY environment variable
 7. Stack branches linearly with git-spice
 
-**Return immediately with:**
-```json
-{
-  "run_id": "{run-id}",
-  "status": "started"
-}
-```
+**Expected response:**
+
+The tool will return immediately with:
+- **run_id**: The run identifier (should match your runId)
+- **status**: "started" (execution continues in background)
+
+**Store the run_id** for use in Step 2.1 (status polling).
 
 ### Step 2.1: Poll Execution Status
 
-**Poll the subagent_status MCP tool periodically:**
+**Poll the `subagent_status` MCP tool periodically to track progress.**
 
-```json
-{
-  "tool": "subagent_status",
-  "run_id": "{run-id}"
-}
+**Tool invocation:**
+
+Use the `subagent_status` MCP tool with:
+- **run_id**: The run_id returned from `spectacular_execute` in Step 2
+
+**Example:**
+```
+Call the subagent_status MCP tool with:
+- run_id: "{run-id}"
 ```
 
-**Response format:**
-```json
-{
-  "run_id": "{run-id}",
-  "status": "running",
-  "phase": 2,
-  "total_phases": 5,
-  "tasks": [
-    {
-      "id": "1.1",
-      "status": "completed",
-      "branch": "abc123-task-1-1-schema"
-    },
-    {
-      "id": "2.1",
-      "status": "running",
-      "started_at": "2025-01-14T10:30:00Z"
-    }
-  ],
-  "started_at": "2025-01-14T10:00:00Z"
-}
-```
+**Expected response:**
+
+The tool returns execution status containing:
+- **run_id**: The run identifier
+- **status**: Current status ("running", "completed", or "failed")
+- **phase**: Current phase number being executed
+- **total_phases**: Total number of phases in the plan
+- **tasks**: Array of task statuses with:
+  - **id**: Task identifier (e.g., "1-1", "2-3")
+  - **status**: Task status ("pending", "running", "completed", or "failed")
+  - **branch**: Git branch name (if task created a branch)
+  - **started_at**: ISO timestamp when task started (if running/completed)
+  - **completed_at**: ISO timestamp when task finished (if completed)
+- **started_at**: ISO timestamp when execution started
+- **completed_at**: ISO timestamp when execution finished (if completed/failed)
+- **error**: Error message (if status is "failed")
 
 **Display progress updates to user:**
 
