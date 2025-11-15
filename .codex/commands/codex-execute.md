@@ -4,17 +4,17 @@ description: Execute implementation plan via Codex MCP server with automatic par
 
 <!--
 DUPLICATION NOTICE:
-Steps 0a-1.7 (orchestration setup) are intentionally duplicated from commands/execute.md.
+Steps 0a-0c and 1.5-1.7 (orchestration setup) are intentionally duplicated from commands/execute.md.
 This duplication enables independent evolution of Codex and Claude Code execution paths.
 
-If you update orchestration logic (Run ID extraction, plan parsing, validation, etc.),
+If you update orchestration logic (Run ID extraction, worktree verification, validation, etc.),
 check BOTH files:
 - commands/execute.md (Claude Code - uses Task tool)
 - .codex/commands/codex-execute.md (Codex - uses MCP tool)
 
 The ONLY difference is Step 2:
 - execute.md: Uses executing-parallel-phase and executing-sequential-phase skills with Task tool
-- codex-execute.md: Calls spectacular_execute MCP tool and polls subagent_status
+- codex-execute.md: Calls spectacular_execute MCP tool with plan_path (MCP server handles parsing)
 
 See CLAUDE.md "Codex-Specific Commands" section for architecture rationale.
 -->
@@ -25,15 +25,15 @@ You are executing an implementation plan using the Codex MCP server.
 
 **Execution Flow:**
 
-1. **Orchestrator (This Command)**: Parses plan, validates setup, configures options
-2. **MCP Server** (spectacular-codex): Receives structured plan object, spawns Codex CLI subagents
+1. **Orchestrator (This Command)**: Validates worktree, setup, configures options
+2. **MCP Server** (spectacular-codex): Parses plan.md, spawns Codex CLI subagents
 3. **Codex Subagents**: Execute tasks in isolated worktrees (parallel or sequential)
 4. **Git State**: Branches track completion, worktrees provide isolation
 
 **Key Difference from Claude Code:**
 
 - Claude Code: Uses Task tool to spawn Claude subagents in same session
-- Codex: Uses MCP tool to spawn separate Codex CLI processes with `--dangerously-bypass-approvals-and-sandbox --yolo`
+- Codex: Calls spectacular_execute MCP tool which spawns separate Codex CLI processes with `--dangerously-bypass-approvals-and-sandbox --yolo`
 
 ## Available Skills
 
@@ -41,7 +41,7 @@ You are executing an implementation plan using the Codex MCP server.
 
 **Support Skills** (read as needed when referenced):
 
-- `validating-setup-commands` - Reference if CLAUDE.md setup validation needed (Step 1.5)
+- `validating-setup-commands` - Reference if CLAUDE.md setup validation needed (Step 1.1)
 - `using-git-spice` - Reference for git-spice command syntax (as needed)
 - `verification-before-completion` - Reference before claiming completion (Step 3)
 - `finishing-a-development-branch` - Reference after all phases complete (Step 4)
@@ -166,221 +166,11 @@ fi
 
 **Note:** Orchestrator proceeds immediately to Step 1. MCP server handles resume by checking current branch and existing task branches.
 
-### Step 1: Read and Parse Plan
-
-**Read the plan.md file:**
-
-Use the Read tool to read the plan file at the path provided by the user.
-
-**Parse the plan into a structured object using these steps:**
-
-#### 1.1: Extract Header Information
-
-From the plan markdown, extract:
-
-```bash
-# Extract title (first h1 heading)
-# Pattern: # Implementation Plan: {title}
-TITLE=$(grep -m 1 "^# " plan.md | sed 's/^# //')
-
-# Extract runId (already have from Step 0a)
-# Pattern: Run ID: {runId}
-
-# Extract feature slug (already have from Step 0a, but verify)
-# Pattern: Feature: {feature-slug}
-FEATURE_SLUG=$(grep -m 1 "^Feature:" plan.md | sed 's/^Feature: *//')
-```
-
-#### 1.2: Parse Phases
-
-Parse phases using this pattern:
-
-**Phase header format:**
-```
-## Phase {N}: {Phase Name} (Parallel|Sequential)
-```
-
-**For each phase:**
-1. Extract phase number (N)
-2. Extract phase name
-3. Extract strategy (Parallel or Sequential)
-4. Extract all tasks within this phase (until next phase header or end of file)
-
-**Example parsing logic:**
-
-```python
-import re
-
-# Find all phase headers
-phase_pattern = r'^##\s*Phase\s+(\d+)[\s:–-]+(.+?)\s*\((Parallel|Sequential)\)\s*$'
-phases = []
-
-for match in re.finditer(phase_pattern, plan_content, re.MULTILINE | re.IGNORECASE):
-    phase_id = match.group(1)
-    phase_name = match.group(2).strip()
-    strategy = match.group(3).lower()  # "parallel" or "sequential"
-
-    # Extract phase content (from this match to next phase or EOF)
-    phase_start = match.end()
-    # Parse tasks within this phase...
-```
-
-#### 1.3: Parse Tasks Within Each Phase
-
-**Task header format:**
-```
-### Task {N}-{M}: {Task Name}
-**Description:** {description}
-**Files:**
-- {file1}
-- {file2}
-
-**Acceptance Criteria:**
-- {criterion1}
-- {criterion2}
-
-**Dependencies:** {task-id1}, {task-id2} | None
-```
-
-**For each task:**
-
-1. **Extract task ID and name:**
-   - Pattern: `### Task {N}-{M}: {Task Name}`
-   - Task ID: `{N}-{M}` (e.g., "1-1", "2-3")
-   - Task name: Everything after the colon
-
-2. **Extract description:**
-   - Pattern: `**Description:** {text}`
-   - Single line after the header
-
-3. **Extract files (list):**
-   - Pattern: `**Files:**` followed by list items
-   - List items start with `- ` or `* `
-   - Capture until next section header (`**`)
-
-4. **Extract acceptance criteria (list):**
-   - Pattern: `**Acceptance Criteria:**` followed by list items
-   - Same list parsing as files
-
-5. **Extract dependencies:**
-   - Pattern: `**Dependencies:** {text}`
-   - Parse comma-separated task IDs
-   - If "None", set to empty array
-
-**Example parsing logic:**
-
-```python
-task_pattern = r'^###\s*Task\s+([\d.-]+)[\s:–-]+(.+)\s*$'
-
-for task_match in re.finditer(task_pattern, phase_content, re.MULTILINE):
-    task_id = task_match.group(1).replace('.', '-')  # Convert 1.1 to 1-1
-    task_name = task_match.group(2).strip()
-
-    # Extract task content (from this match to next task or EOF)
-    task_content = get_task_content(phase_content, task_match)
-
-    # Parse description
-    desc_match = re.search(r'\*\*Description:\*\*\s*(.+)', task_content)
-    description = desc_match.group(1).strip() if desc_match else ""
-
-    # Parse files (list items after **Files:**)
-    files = extract_list_items(task_content, 'Files')
-
-    # Parse acceptance criteria
-    acceptance_criteria = extract_list_items(task_content, 'Acceptance Criteria')
-
-    # Parse dependencies
-    deps_match = re.search(r'\*\*Dependencies:\*\*\s*(.+)', task_content)
-    deps_raw = deps_match.group(1).strip() if deps_match else "None"
-    dependencies = [] if deps_raw.lower() == 'none' else [d.strip() for d in deps_raw.split(',')]
-```
-
-**Helper function to extract list items:**
-
-```python
-def extract_list_items(content, section_name):
-    items = []
-    # Find section header and capture lines starting with - or *
-    section_pattern = f'\\*\\*{section_name}:\\*\\*\\s*\\n([\\s\\S]*?)(?=\\n\\*\\*|$)'
-    match = re.search(section_pattern, content)
-
-    if match:
-        list_content = match.group(1)
-        # Extract list items
-        for line in list_content.split('\n'):
-            if line.strip().startswith(('-', '*')):
-                item = line.strip()[1:].strip()  # Remove leading - or *
-                if item:
-                    items.append(item)
-
-    return items
-```
-
-#### 1.4: Build Structured Plan Object
-
-After parsing all phases and tasks, build this JSON structure:
-
-```json
-{
-  "runId": "{run-id}",
-  "featureSlug": "{feature-slug}",
-  "title": "{title}",
-  "phases": [
-    {
-      "id": 1,
-      "name": "Foundation",
-      "strategy": "sequential",
-      "tasks": [
-        {
-          "id": "1-1",
-          "name": "Database Schema",
-          "description": "Create user and session tables with Prisma",
-          "files": ["prisma/schema.prisma", "prisma/migrations/001_init.sql"],
-          "acceptanceCriteria": [
-            "User table with id, email, created_at",
-            "Session table with id, user_id, token",
-            "Migration runs successfully"
-          ],
-          "dependencies": []
-        },
-        {
-          "id": "1-2",
-          "name": "Authentication Service",
-          "description": "Implement JWT-based authentication",
-          "files": ["src/auth/service.ts", "src/auth/types.ts"],
-          "acceptanceCriteria": [
-            "generateToken() creates valid JWT",
-            "verifyToken() validates tokens",
-            "Tests pass"
-          ],
-          "dependencies": ["1-1"]
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "name": "API Routes",
-      "strategy": "parallel",
-      "tasks": [...]
-    }
-  ]
-}
-```
-
-**Verify plan structure:**
-- ✅ Has phases with clear strategies
-- ✅ All tasks have files specified
-- ✅ All tasks have acceptance criteria
-- ✅ Dependencies reference valid task IDs
-- ✅ Parallel phases have independent tasks (no circular dependencies)
-
-**Store this structured object** - you will pass it to the MCP tool in Step 2.
-
-### Step 1.5: Validate Setup Commands (REQUIRED)
+### Step 1.1: Validate Setup Commands (REQUIRED)
 
 **Use the `validating-setup-commands` skill:**
 
-This skill validates that CLAUDE.md defines required setup commands BEFORE creating worktrees. It provides clear error messages with examples if missing.
+This skill validates that CLAUDE.md defines required setup commands BEFORE executing the plan. It provides clear error messages with examples if missing.
 
 The skill will extract and return:
 - `INSTALL_CMD` - Required dependency installation command
@@ -388,33 +178,13 @@ The skill will extract and return:
 
 Store these commands for reference (MCP server will handle actual installation).
 
-### Step 1.6: Detect Project Commands (Optional)
-
-**Optionally detect project-specific quality check commands.**
-
-**This is optional - most projects define commands in CLAUDE.md that the MCP server can discover.**
-
-If you want to provide hints, check for common patterns:
-- **TypeScript/JavaScript**: `package.json` scripts
-- **Python**: `pytest`, `ruff`, `black`
-- **Go**: `go test`, `golangci-lint`
-- **Rust**: `cargo test`, `cargo clippy`
-
-**If detected, mention in final report:**
-- `TEST_CMD` - Command to run tests
-- `LINT_CMD` - Command to run linting
-- `FORMAT_CMD` - Command to format code
-- `BUILD_CMD` - Command to build project
-
-**IMPORTANT: Do NOT read constitution files here. Let MCP server handle quality checks to reduce token usage.**
-
-### Step 1.7: Configure Code Review Frequency
+### Step 1.2: Configure Code Review Frequency
 
 **Determine when to run code reviews:**
 
 ```bash
 # Check if REVIEW_FREQUENCY env var is set
-REVIEW_FREQUENCY=${REVIEW_FREQUENCY:-}
+echo "REVIEW_FREQUENCY=${REVIEW_FREQUENCY:-}"
 ```
 
 **If not set, prompt user for preference:**
@@ -446,44 +216,45 @@ Options:
 Code review frequency: {REVIEW_FREQUENCY}
 ```
 
-**Note:** This setting will be passed to MCP server via environment variable or plan metadata.
+**Note:** This setting will be passed to MCP server via environment variable.
 
 ### Step 2: Execute via MCP Server
 
-**Call the `spectacular_execute` MCP tool with the structured plan object you built in Step 1.**
+**Call the `spectacular_execute` MCP tool with the plan path.**
 
-**CRITICAL:** The MCP server does NOT parse plan.md. You must pass the fully structured plan object from Step 1.4.
+**IMPORTANT:** The MCP server will parse the plan.md file internally. You only need to provide the path.
 
 **Tool invocation:**
 
-Use the `spectacular_execute` MCP tool (configured in `~/.codex/mcp-servers.json`) with these arguments:
+Call the `spectacular_execute` MCP tool with these arguments:
 
-- **plan** (required): The structured plan object from Step 1.4 containing:
-  - `runId`: The 6-character hex run ID
-  - `featureSlug`: The feature slug (e.g., "magic-link-auth")
-  - `title`: The plan title
-  - `phases`: Array of phase objects with tasks
-
-- **base_branch** (optional): The base branch for worktree creation (defaults to "main")
-
-**Example invocation:**
-
+```json
+{
+  "plan_path": "specs/{run-id}-{feature-slug}/plan.md",
+  "base_branch": "main"
+}
 ```
-Call the spectacular_execute MCP tool with:
-- plan: <the structured plan object from Step 1.4>
-- base_branch: "main"
+
+**Example:**
+
+```json
+{
+  "plan_path": "specs/0729be-mobile-optimizations/plan.md",
+  "base_branch": "main"
+}
 ```
 
 **The MCP server will:**
-1. Bootstrap skills (superpowers, spectacular)
-2. Ensure `.worktrees/{run-id}-main` exists
-3. Execute each phase according to strategy:
+1. Parse plan.md to extract phases and tasks
+2. Bootstrap skills (superpowers, spectacular)
+3. Ensure `.worktrees/{run-id}-main` exists
+4. Execute each phase according to strategy:
    - Sequential: Tasks run one-by-one in main worktree
    - Parallel: Each task gets isolated worktree, runs simultaneously
-4. Spawn Codex CLI subagents with embedded skill instructions (using `codex run --dangerously-bypass-approvals-and-sandbox --yolo`)
-5. Track completion via git branches
-6. Run code reviews based on REVIEW_FREQUENCY environment variable
-7. Stack branches linearly with git-spice
+5. Spawn Codex CLI subagents with embedded skill instructions (using `codex run --dangerously-bypass-approvals-and-sandbox --yolo`)
+6. Track completion via git branches
+7. Run code reviews based on REVIEW_FREQUENCY environment variable
+8. Stack branches linearly with git-spice
 
 **Expected response:**
 
@@ -499,13 +270,19 @@ The tool will return immediately with:
 
 **Tool invocation:**
 
-Use the `subagent_status` MCP tool with:
-- **run_id**: The run_id returned from `spectacular_execute` in Step 2
+Call the `subagent_status` MCP tool with:
+
+```json
+{
+  "run_id": "{run-id}"
+}
+```
 
 **Example:**
-```
-Call the subagent_status MCP tool with:
-- run_id: "{run-id}"
+```json
+{
+  "run_id": "0729be"
+}
 ```
 
 **Expected response:**
@@ -514,7 +291,6 @@ The tool returns execution status containing:
 - **run_id**: The run identifier
 - **status**: Current status ("running", "completed", or "failed")
 - **phase**: Current phase number being executed
-- **total_phases**: Total number of phases in the plan
 - **tasks**: Array of task statuses with:
   - **id**: Task identifier (e.g., "1-1", "2-3")
   - **status**: Task status ("pending", "running", "completed", or "failed")
@@ -553,39 +329,16 @@ After execution completes (`status: "completed"`):
 
 This skill enforces verification BEFORE claiming work is done.
 
-**Required verifications (if commands detected):**
+**Required verifications:**
 ```bash
 # Navigate to main worktree
 cd .worktrees/{run-id}-main
 
-# Run full test suite
-if [ -n "$TEST_CMD" ]; then
-  $TEST_CMD || { echo "❌ Tests failed"; exit 1; }
-fi
-
-# Run linting
-if [ -n "$LINT_CMD" ]; then
-  $LINT_CMD || { echo "❌ Linting failed"; exit 1; }
-fi
-
-# Run production build
-if [ -n "$BUILD_CMD" ]; then
-  $BUILD_CMD || { echo "❌ Build failed"; exit 1; }
-fi
-
-# Verify all detected checks passed
-echo "✅ All quality checks passed - ready to complete"
+# Run verification commands (detected from CLAUDE.md/constitution)
+# The verification-before-completion skill will guide you through this
 
 # Return to main repo
 cd ../..
-```
-
-**If no commands detected:**
-
-```
-⚠️  No test/lint/build commands found in project.
-Add to CLAUDE.md or constitution/testing.md for automated quality gates.
-Proceeding without verification - manual review recommended.
 ```
 
 **Critical:** Evidence before assertions. Never claim "tests pass" without running them.
@@ -637,14 +390,9 @@ Use the `finishing-a-development-branch` skill to:
 
 ## Quality Checks
 
-Quality checks are project-specific (detected from CLAUDE.md, constitution, or common patterns):
-
-✅ Tests passing (if `TEST_CMD` detected)
-✅ Linting clean (if `LINT_CMD` detected)
-✅ Formatting applied (if `FORMAT_CMD` detected)
-✅ Build successful (if `BUILD_CMD` detected)
-
-If no commands detected, quality gates are skipped with warning to user.
+✅ Tests passing
+✅ Linting clean
+✅ Build successful
 ✅ {total-commits} commits across {branch-count} task branches
 
 ## Next Steps
@@ -696,7 +444,10 @@ git branch -d {run-id}-main
 **If MCP tool call fails:**
 
 Check error response from spectacular_execute:
-- Plan validation errors: Fix plan structure, retry
+- `plan_path or plan must be provided`: Missing required argument
+- `Plan file not found`: Invalid path or file doesn't exist
+- `Invalid plan path`: Path doesn't match `specs/{runId}-{slug}/plan.md` format
+- `runId mismatch`: plan_path runId doesn't match plan content
 - Worktree errors: Verify `.worktrees/{run-id}-main` exists
 - Subagent spawn errors: Check Codex CLI is installed and configured
 - Git errors: Verify git-spice is installed and repo initialized
@@ -715,23 +466,27 @@ Check error response from spectacular_execute:
 
 **Recovery options:**
 
-1. **Retry failed task**: Call `spectacular_execute` with `tasks` filter:
-   ```json
-   {
-     "tool": "spectacular_execute",
-     "plan": {...},
-     "tasks": [{ "id": "2.3" }]
-   }
+1. **Resume from checkpoint**: Simply re-run the same execute command. MCP server auto-detects completed branches and skips them.
+
+2. **Manual intervention**: Navigate to worktree, fix issue, commit, then resume:
+   ```bash
+   cd .worktrees/{run-id}-main
+   # Fix the issue
+   git add .
+   git commit -m "Fix: {description}"
+   cd ../..
+   # Re-run execute command
    ```
 
-2. **Resume from checkpoint**: MCP server auto-detects completed branches, skips them
-
-3. **Manual intervention**: Navigate to worktree, fix issue, commit, then resume
-
-4. **Abort and restart**: Remove failed branches, re-run from beginning
+3. **Abort and restart**: Remove failed branches, re-run from beginning:
+   ```bash
+   git branch | grep "{run-id}-task-" | xargs git branch -D
+   # Re-run execute command
+   ```
 
 ## Important Notes
 
+- **MCP Server handles parsing** - Just pass plan_path, MCP server parses plan.md internally
 - **MCP Server delegates, never executes** - This command orchestrates, MCP server spawns Codex subagents
 - **Codex subagents own their operations** - Each task runs in isolated Codex CLI process with `--yolo` flag
 - **Skill-driven execution** - MCP server embeds skill instructions in subagent prompts
