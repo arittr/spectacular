@@ -19,6 +19,7 @@ const { execSync } = require('child_process');
 const PLUGIN_DIR = path.resolve(__dirname, '..');
 const SKILLS_DIR = path.join(PLUGIN_DIR, 'skills');
 const COMMANDS_DIR = path.join(PLUGIN_DIR, 'commands');
+const CODEX_COMMANDS_DIR = path.join(PLUGIN_DIR, '.codex', 'commands');
 
 /**
  * Extract frontmatter from markdown file
@@ -73,29 +74,53 @@ function findSkillsInDir(dir, prefix = '') {
 }
 
 /**
- * Find all commands
+ * Find all commands (both regular and Codex-specific)
  */
 function findCommands() {
   const commands = [];
 
-  if (!fs.existsSync(COMMANDS_DIR)) return commands;
+  // Scan regular commands directory
+  if (fs.existsSync(COMMANDS_DIR)) {
+    const entries = fs.readdirSync(COMMANDS_DIR);
 
-  const entries = fs.readdirSync(COMMANDS_DIR);
+    for (const entry of entries) {
+      if (!entry.endsWith('.md')) continue;
 
-  for (const entry of entries) {
-    if (!entry.endsWith('.md')) continue;
+      const commandPath = path.join(COMMANDS_DIR, entry);
+      const content = fs.readFileSync(commandPath, 'utf8');
+      const frontmatter = extractFrontmatter(content);
 
-    const commandPath = path.join(COMMANDS_DIR, entry);
-    const content = fs.readFileSync(commandPath, 'utf8');
-    const frontmatter = extractFrontmatter(content);
+      const name = path.basename(entry, '.md');
+      commands.push({
+        name: name,
+        description: frontmatter.description || '(no description)',
+        path: commandPath,
+        frontmatter,
+        type: 'claude-code'
+      });
+    }
+  }
 
-    const name = path.basename(entry, '.md');
-    commands.push({
-      name: name,
-      description: frontmatter.description || '(no description)',
-      path: commandPath,
-      frontmatter
-    });
+  // Scan Codex-specific commands directory
+  if (fs.existsSync(CODEX_COMMANDS_DIR)) {
+    const entries = fs.readdirSync(CODEX_COMMANDS_DIR);
+
+    for (const entry of entries) {
+      if (!entry.endsWith('.md')) continue;
+
+      const commandPath = path.join(CODEX_COMMANDS_DIR, entry);
+      const content = fs.readFileSync(commandPath, 'utf8');
+      const frontmatter = extractFrontmatter(content);
+
+      const name = path.basename(entry, '.md');
+      commands.push({
+        name: name,
+        description: frontmatter.description || '(no description)',
+        path: commandPath,
+        frontmatter,
+        type: 'codex'
+      });
+    }
   }
 
   return commands;
@@ -256,11 +281,27 @@ function findSkillsCommand() {
  */
 function findCommandsCommand() {
   const commands = findCommands();
+  const claudeCodeCommands = commands.filter(c => c.type === 'claude-code');
+  const codexCommands = commands.filter(c => c.type === 'codex');
 
   console.log('# Available Commands\n');
-  for (const cmd of commands) {
-    console.log(`## ${cmd.name}\n`);
-    console.log(`${cmd.description}\n`);
+
+  if (codexCommands.length > 0) {
+    console.log('## Codex-Specific Commands\n');
+    console.log('*These commands use the spectacular-codex MCP server for execution*\n');
+    for (const cmd of codexCommands) {
+      console.log(`### ${cmd.name}\n`);
+      console.log(`${cmd.description}\n`);
+    }
+  }
+
+  if (claudeCodeCommands.length > 0) {
+    console.log('## Claude Code Commands (Reference)\n');
+    console.log('*These commands are for Claude Code plugin, not Codex. Listed for reference only.*\n');
+    for (const cmd of claudeCodeCommands) {
+      console.log(`### ${cmd.name}\n`);
+      console.log(`${cmd.description}\n`);
+    }
   }
 }
 

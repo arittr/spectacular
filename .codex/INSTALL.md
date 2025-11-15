@@ -110,11 +110,14 @@ codex
 
 # Codex will use spectacular:decomposing-tasks skill to generate plan.md
 
-# Execute the plan
-"Execute the plan at specs/abc123-magic-link/plan.md"
+# Execute the plan via MCP server
+"Execute the plan at specs/abc123-magic-link/plan.md using codex-execute"
 
-# Codex will use spectacular:executing-parallel-phase and spectacular:executing-sequential-phase
-# skills to orchestrate parallel/sequential execution
+# Codex will:
+# 1. Parse the plan and extract structured data
+# 2. Call spectacular_execute MCP tool with plan object
+# 3. Poll subagent_status for progress updates
+# 4. Display phase/task completion in real-time
 ```
 
 ## How Spectacular Works in Codex
@@ -142,10 +145,14 @@ codex
 
 Run `~/.codex/spectacular/.codex/spectacular-codex find-commands` to see all commands:
 
+**Codex-Specific Commands** (use these in Codex):
+- **codex-execute** - Execute plan via spectacular-codex MCP server with parallel orchestration
+
+**Claude Code Commands** (reference only):
 - **init** - Initialize spectacular environment
 - **spec** - Generate feature specification
 - **plan** - Decompose spec into executable plan
-- **execute** - Execute plan with parallel orchestration
+- **execute** - Execute plan with parallel orchestration (Claude Code only - uses Task tool)
 
 ## Available Skills
 

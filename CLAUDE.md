@@ -47,6 +47,47 @@ spectacular/
 3. **`/spectacular:plan`** → Decomposes spec into execution plan with automatic phase grouping
 4. **`/spectacular:execute`** → Orchestrates parallel/sequential implementation with git worktrees
 
+### Codex-Specific Commands
+
+**IMPORTANT: Intentional Duplication for Codex Independence**
+
+The `.codex/commands/` directory contains Codex-specific command variants that use the spectacular-codex MCP server instead of Claude Code's Task tool. These commands intentionally duplicate orchestration logic (Steps 0a-1.7) from `commands/execute.md` to enable independent evolution of Codex and Claude Code execution paths.
+
+**Key files with duplicated orchestration:**
+- `commands/execute.md` (Claude Code) - Uses Task tool to spawn Claude subagents
+- `.codex/commands/codex-execute.md` (Codex) - Uses MCP tool to spawn Codex CLI subagents
+
+**When updating orchestration logic (Run ID extraction, plan parsing, validation, etc.):**
+
+⚠️ **YOU MUST CHECK BOTH FILES** - Do not assume changes to one file automatically apply to the other.
+
+**What's duplicated:**
+- Steps 0a-0c: Run ID extraction, worktree verification, resume detection
+- Step 1: Plan parsing and validation
+- Step 1.5: Setup command validation
+- Step 1.6: Quality command detection
+- Step 1.7: Code review frequency configuration
+- Steps 3-5: Verification, finish, and reporting
+
+**What's different:**
+- Step 2 in `execute.md`: Uses `executing-parallel-phase` and `executing-sequential-phase` skills with Task tool
+- Step 2 in `codex-execute.md`: Calls `spectacular_execute` MCP tool and polls `subagent_status`
+
+**Why duplication is intentional:**
+1. **Decoupling**: Codex and Claude Code can evolve independently
+2. **Self-contained**: Each command is complete and standalone (easier for LLMs)
+3. **Different backends**: Task tool vs MCP server require fundamentally different execution logic
+4. **Manageable size**: ~200 lines duplicated, not 2000 (maintenance overhead is acceptable)
+
+**Testing both variants:**
+- When changing orchestration, test in both Claude Code and Codex
+- Use spectacular test suite for Claude Code variant
+- Manual testing or Codex-specific tests for Codex variant
+
+**Rationale documented in:**
+- Duplication notice comment at top of `.codex/commands/codex-execute.md`
+- This section in CLAUDE.md
+
 ## Using Spectacular in Your Project
 
 ### Defining Setup Commands
