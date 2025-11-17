@@ -224,25 +224,49 @@ Code review frequency: {REVIEW_FREQUENCY}
 
 **IMPORTANT:** The MCP server will parse the plan.md file internally. You only need to provide the path.
 
+**Construct the plan path from extracted variables:**
+
+Using the `RUN_ID` and `FEATURE_SLUG` you extracted in Step 0a, construct the absolute path to the plan.md file:
+
+```bash
+# Construct absolute path to plan.md in worktree
+REPO_ROOT=$(git rev-parse --show-toplevel)
+PLAN_PATH_FOR_MCP="${REPO_ROOT}/.worktrees/${RUN_ID}-main/specs/${RUN_ID}-${FEATURE_SLUG}/plan.md"
+echo "Plan path for MCP: $PLAN_PATH_FOR_MCP"
+
+# Verify the plan file exists before calling MCP tool
+if [ ! -f "$PLAN_PATH_FOR_MCP" ]; then
+  echo "❌ Error: Plan file not found at $PLAN_PATH_FOR_MCP"
+  echo "Run /spectacular:plan first to create the plan."
+  exit 1
+fi
+```
+
 **Tool invocation:**
 
-Call the `spectacular_execute` MCP tool with these arguments:
+Call the `spectacular_execute` MCP tool with the absolute path:
 
 ```json
 {
-  "plan_path": "specs/{run-id}-{feature-slug}/plan.md",
+  "plan_path": "/absolute/path/to/.worktrees/{RUN_ID}-main/specs/{RUN_ID}-{FEATURE_SLUG}/plan.md",
   "base_branch": "main"
 }
 ```
 
-**Example:**
+**CRITICAL:** Use the absolute path you constructed in the bash command above. Replace the placeholders with actual values.
+
+**Example with actual values:**
+
+If `REPO_ROOT=/Users/drewritter/projects/bignight.party`, `RUN_ID=0729be`, and `FEATURE_SLUG=mobile-optimizations`, call:
 
 ```json
 {
-  "plan_path": "specs/0729be-mobile-optimizations/plan.md",
+  "plan_path": "/Users/drewritter/projects/bignight.party/.worktrees/0729be-main/specs/0729be-mobile-optimizations/plan.md",
   "base_branch": "main"
 }
 ```
+
+**Why absolute path?** The plan.md file lives in the worktree (`.worktrees/{runId}-main/specs/...`), not the main repo. The MCP server needs the full path to find it.
 
 **The MCP server will:**
 1. Parse plan.md to extract phases and tasks
