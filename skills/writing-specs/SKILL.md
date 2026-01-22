@@ -28,6 +28,35 @@ Do NOT use for:
 
 **Announce:** "I'm using the writing-specs skill to create a feature specification."
 
+## Workspace Detection
+
+Before starting the spec workflow, detect the workspace mode:
+
+```bash
+# Detect workspace mode
+REPO_COUNT=$(find . -maxdepth 2 -name ".git" -type d 2>/dev/null | wc -l | tr -d ' ')
+if [ "$REPO_COUNT" -gt 1 ]; then
+  echo "Multi-repo workspace detected ($REPO_COUNT repos)"
+  WORKSPACE_MODE="multi-repo"
+  WORKSPACE_ROOT=$(pwd)
+  # List detected repos
+  find . -maxdepth 2 -name ".git" -type d | xargs -I{} dirname {} | sed 's|^\./||'
+else
+  echo "Single-repo mode"
+  WORKSPACE_MODE="single-repo"
+fi
+```
+
+**Single-repo mode (current behavior):**
+- Specs stored in `specs/{runId}-{feature}/spec.md` at repo root
+- Worktree created at `.worktrees/{runId}-main/`
+- Constitution referenced from `@docs/constitutions/current/`
+
+**Multi-repo mode (new behavior):**
+- Specs stored in `./specs/{runId}-{feature}/spec.md` at WORKSPACE root
+- NO worktree created (specs live at workspace level, not inside any repo)
+- Each repo's constitution referenced separately
+
 ## Constitution Adherence
 
 **All specifications MUST follow**: @docs/constitutions/current/
@@ -63,6 +92,18 @@ echo "RUN_ID: $RUN_ID"
 ### Step 0.5: Create Isolated Worktree
 
 **Announce:** "Creating isolated worktree for this spec run..."
+
+**Multi-repo mode:** Skip worktree creation. Specs live at workspace root, not inside any repo.
+
+```bash
+if [ "$WORKSPACE_MODE" = "multi-repo" ]; then
+  echo "Multi-repo mode: Specs stored at workspace root, no worktree needed"
+  mkdir -p specs/${RUN_ID}-${FEATURE_SLUG}
+  # Skip to Step 1 (brainstorming)
+fi
+```
+
+**Single-repo mode:** Continue with worktree creation as normal.
 
 **Create worktree for isolated development:**
 
@@ -324,7 +365,7 @@ Options:
 
 After validation passes OR clarifications documented, report to user:
 
-**If validation passed:**
+**If validation passed (single-repo mode):**
 ```
 Feature Specification Complete & Validated
 
@@ -344,7 +385,30 @@ Next Steps (User Actions - DO NOT AUTO-EXECUTE):
 2. When ready, create implementation plan: /spectacular:plan @.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
 ```
 
-**If clarifications needed:**
+**If validation passed (multi-repo mode):**
+```
+Feature Specification Complete & Validated
+
+RUN_ID: {run-id}
+Workspace: {workspace-root}
+Location: specs/{run-id}-{feature-slug}/spec.md
+
+Repos affected:
+- backend: @backend/docs/constitutions/current/
+- frontend: @frontend/docs/constitutions/current/
+
+Constitution Compliance: PASS
+Architecture Quality: PASS
+Requirements Quality: PASS
+
+Note: Spec is at workspace root, affecting multiple repos.
+
+Next Steps (User Actions - DO NOT AUTO-EXECUTE):
+1. Review the spec: specs/{run-id}-{feature-slug}/spec.md
+2. When ready, create plan: /spectacular:plan @specs/{run-id}-{feature-slug}/spec.md
+```
+
+**If clarifications needed (single-repo mode):**
 ```
 Feature Specification Complete - Clarifications Needed
 
@@ -359,6 +423,27 @@ Note: Spec is in isolated worktree, main repo unchanged.
 Next Steps:
 1. Review spec: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
 2. Answer clarifications: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/clarifications.md
+3. Once resolved, re-run: /spectacular:spec {feature-description}
+```
+
+**If clarifications needed (multi-repo mode):**
+```
+Feature Specification Complete - Clarifications Needed
+
+RUN_ID: {run-id}
+Workspace: {workspace-root}
+Location: specs/{run-id}-{feature-slug}/spec.md
+Clarifications: specs/{run-id}-{feature-slug}/clarifications.md
+
+Repos affected:
+- backend: @backend/docs/constitutions/current/
+- frontend: @frontend/docs/constitutions/current/
+
+Note: Spec is at workspace root, affecting multiple repos.
+
+Next Steps:
+1. Review spec: specs/{run-id}-{feature-slug}/spec.md
+2. Answer clarifications: specs/{run-id}-{feature-slug}/clarifications.md
 3. Once resolved, re-run: /spectacular:spec {feature-description}
 ```
 
@@ -456,6 +541,33 @@ Next Steps:
 - Testing: @docs/constitutions/current/testing.md
 - {External SDK}: {link to official docs}
 ```
+
+### Multi-Repo Spec Template Addition
+
+For multi-repo features, add this section to the spec:
+
+```markdown
+## Constitutions
+
+This feature must comply with constitutions from each affected repo:
+
+**backend**: @backend/docs/constitutions/current/
+- architecture.md - Backend layer boundaries
+- patterns.md - Backend patterns (next-safe-action, etc.)
+- schema-rules.md - Database design rules
+
+**frontend**: @frontend/docs/constitutions/current/
+- architecture.md - Frontend component structure
+- patterns.md - Frontend patterns (React Query, etc.)
+
+**shared-lib**: @shared-lib/docs/constitutions/current/
+- (if applicable)
+```
+
+When brainstorming in multi-repo mode:
+- Read constitutions from ALL relevant repos
+- Note which repo each architectural decision applies to
+- Ensure cross-repo consistency (e.g., API contracts)
 
 ## Iron Laws
 
