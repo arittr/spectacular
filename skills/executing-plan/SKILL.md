@@ -64,6 +64,48 @@ The execute command uses an orchestrator-with-embedded-instructions architecture
 - `troubleshooting-execute` - Reference if execution fails (error recovery)
 - `using-git-worktrees` - Reference if worktree issues occur (diagnostics)
 
+## Multi-Repo Support
+
+### Detecting Multi-Repo Mode
+
+At the start of execution, detect workspace mode:
+
+```bash
+# Detect workspace mode
+REPO_COUNT=$(find . -maxdepth 2 -name ".git" -type d 2>/dev/null | wc -l | tr -d ' ')
+if [ "$REPO_COUNT" -gt 1 ]; then
+  echo "Multi-repo workspace detected ($REPO_COUNT repos)"
+  WORKSPACE_MODE="multi-repo"
+  REPOS=$(find . -maxdepth 2 -name ".git" -type d | xargs -I{} dirname {} | sed 's|^\./||' | tr '\n' ' ')
+  echo "Available repos: $REPOS"
+else
+  echo "Single-repo mode"
+  WORKSPACE_MODE="single-repo"
+fi
+```
+
+### Multi-Repo Execution Differences
+
+| Aspect | Single-Repo | Multi-Repo |
+|--------|-------------|------------|
+| Worktree | `.worktrees/{runId}-main/` | Per-task: `{repo}/.worktrees/{runId}-task-X-Y/` |
+| Spec location | `specs/{runId}-{feature}/` | `./specs/{runId}-{feature}/` (workspace root) |
+| Setup commands | One CLAUDE.md | Per-repo CLAUDE.md |
+| Constitution | `@docs/constitutions/current/` | `@{repo}/docs/constitutions/current/` |
+| Git-spice stack | Single stack | Per-repo stacks |
+
+### Passing Repo Context to Phase Skills
+
+When dispatching phase execution, include repo context:
+
+```markdown
+**Multi-repo context for phase:**
+- WORKSPACE_MODE: multi-repo
+- WORKSPACE_ROOT: {absolute path}
+- Task repos: {list of repos with tasks in this phase}
+- Per-task repo: extracted from plan's `**Repo**: {repo}` field
+```
+
 ## The Process
 
 ### Input
@@ -122,6 +164,22 @@ fi
 **Announce:** "Executing with RUN_ID: {run-id}, FEATURE_SLUG: {feature-slug}"
 
 ### Step 0b: Verify Worktree Exists
+
+**Multi-repo mode:** Skip worktree verification at orchestrator level. Each task will create its own worktree in its repo during phase execution.
+
+```bash
+if [ "$WORKSPACE_MODE" = "multi-repo" ]; then
+  echo "Multi-repo mode: Worktrees created per-task during execution"
+  # Verify spec exists at workspace root
+  if [ ! -f "specs/${RUN_ID}-${FEATURE_SLUG}/plan.md" ]; then
+    echo "Error: Plan not found at specs/${RUN_ID}-${FEATURE_SLUG}/plan.md"
+    exit 1
+  fi
+  echo "Plan verified: specs/${RUN_ID}-${FEATURE_SLUG}/plan.md"
+fi
+```
+
+**Single-repo mode:** Continue with existing worktree verification.
 
 **After extracting RUN_ID, verify the worktree exists:**
 
@@ -206,6 +264,21 @@ Files: - src/generator.ts - src/types.ts
 Acceptance Criteria: - Import PromptService from prompts module - Replace manual prompt construction with PromptService.getCommitPrompt() - Update tests to mock PromptService - All tests pass
 Dependencies: Task 4.1 (fallback logic removed)
 ```
+
+**Multi-repo plan parsing:**
+
+For multi-repo plans, also extract the `repo` field from each task:
+
+```
+Task 4.2:
+Name: Integrate prompts module into generator
+Repo: backend  # NEW - required in multi-repo mode
+Files: - src/generator.ts - src/types.ts
+Acceptance Criteria: - Import PromptService from prompts module - Replace manual prompt construction with PromptService.getCommitPrompt() - Update tests to mock PromptService - All tests pass
+Dependencies: Task 4.1 (fallback logic removed)
+```
+
+Pass repo information to phase execution skills.
 
 Verify plan structure:
 - Has phases with clear strategies
@@ -292,6 +365,28 @@ Code review frequency: {REVIEW_FREQUENCY}
 **If resuming:** Start from the incomplete phase/task identified in Step 0.
 
 For each phase in the plan, execute based on strategy:
+
+**Multi-repo phase execution:**
+
+When dispatching phase skills, include:
+- `WORKSPACE_MODE`: "multi-repo" or "single-repo"
+- `WORKSPACE_ROOT`: Absolute path to workspace
+- For each task: `TASK_REPO` field from plan
+
+Example dispatch context:
+```
+WORKSPACE_MODE: multi-repo
+WORKSPACE_ROOT: /home/user/workspace
+Phase 2 tasks:
+- Task 2.1: repo=backend
+- Task 2.2: repo=frontend
+- Task 2.3: repo=frontend
+```
+
+Phase skills use this to:
+- Create worktrees in the correct repo
+- Read CLAUDE.md from the task's repo
+- Read constitution from the task's repo
 
 **Code Review Gates:** Phase execution skills check `REVIEW_FREQUENCY` (set in Step 1.7) to determine when to run code reviews:
 - `per-phase`: Review after each phase before proceeding
@@ -392,6 +487,45 @@ Use the `finishing-a-development-branch` skill to:
    - Mark complete and sync: `gs repo sync`
 
 ### Step 5: Final Report
+
+**Multi-repo final report:**
+
+```markdown
+Feature Implementation Complete
+
+**RUN_ID**: {run-id}
+**Feature**: {feature-name}
+**Workspace Mode**: multi-repo
+**Workspace Root**: {path}
+
+## Per-Repo Summary
+
+| Repo | Tasks | Branches | Status |
+|------|-------|----------|--------|
+| backend | 4 | 4 | Complete |
+| frontend | 3 | 3 | Complete |
+| shared-lib | 1 | 1 | Complete |
+
+## Branch Stacks (per-repo)
+
+**backend:**
+- {runId}-task-1-1-database
+- {runId}-task-2-1-api
+
+**frontend:**
+- {runId}-task-2-2-hook
+- {runId}-task-2-3-ui
+
+## Next Steps
+
+### Submit PRs (per-repo)
+```bash
+cd backend && gs stack submit
+cd ../frontend && gs stack submit
+```
+```
+
+**Single-repo final report:**
 
 ```markdown
 Feature Implementation Complete

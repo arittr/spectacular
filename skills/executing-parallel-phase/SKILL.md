@@ -35,6 +35,56 @@ PARALLEL PHASE = WORKTREES + SUBAGENTS
 
 **All of these destroy the parallel execution architecture.**
 
+## Multi-Repo Support
+
+### Receiving Multi-Repo Context
+
+The orchestrator passes this context for multi-repo execution:
+- `WORKSPACE_MODE`: "multi-repo" or "single-repo"
+- `WORKSPACE_ROOT`: Absolute path to workspace
+- Per-task `TASK_REPO` from plan
+
+### Multi-Repo Worktree Creation
+
+In multi-repo mode, create worktrees INSIDE each task's repo:
+
+**Single-repo (current):**
+```bash
+git worktree add .worktrees/${RUN_ID}-task-${PHASE}-${TASK} ...
+```
+
+**Multi-repo (new):**
+```bash
+# Worktree goes inside the task's repo
+cd ${TASK_REPO}
+git worktree add .worktrees/${RUN_ID}-task-${PHASE}-${TASK} ...
+cd ${WORKSPACE_ROOT}
+```
+
+### Per-Repo Setup Commands
+
+In multi-repo mode, read setup commands from each task's repo:
+
+```bash
+# Single-repo: Read from project root CLAUDE.md
+INSTALL_CMD=$(grep -A1 "**install**:" CLAUDE.md | tail -1)
+
+# Multi-repo: Read from task's repo CLAUDE.md
+INSTALL_CMD=$(grep -A1 "**install**:" ${TASK_REPO}/CLAUDE.md | tail -1)
+```
+
+### Per-Repo Constitution
+
+Pass the correct constitution path to subagents:
+
+```bash
+# Single-repo
+CONSTITUTION="@docs/constitutions/current/"
+
+# Multi-repo
+CONSTITUTION="@${TASK_REPO}/docs/constitutions/current/"
+```
+
 ## Rationalization Table
 
 **Predictable shortcuts you WILL be tempted to make. DO NOT make them.**
@@ -58,60 +108,89 @@ PARALLEL PHASE = WORKTREES + SUBAGENTS
 
 **Before ANY worktree creation, verify the environment is correct:**
 
+**Multi-repo pre-conditions:**
+
 ```bash
-# Get main repo root
-REPO_ROOT=$(git rev-parse --show-toplevel)
-CURRENT=$(pwd)
+if [ "$WORKSPACE_MODE" = "multi-repo" ]; then
+  # Verify each task's repo exists
+  for TASK_REPO in ${TASK_REPOS}; do
+    if [ ! -d "${WORKSPACE_ROOT}/${TASK_REPO}/.git" ]; then
+      echo "❌ Error: Repo not found: ${TASK_REPO}"
+      exit 1
+    fi
+    echo "✅ Verified repo: ${TASK_REPO}"
+  done
 
-# Check 1: Verify orchestrator is in main repo root
-if [ "$CURRENT" != "$REPO_ROOT" ]; then
-  echo "❌ Error: Orchestrator must run from main repo root"
-  echo "Current: $CURRENT"
-  echo "Expected: $REPO_ROOT"
-  echo ""
-  echo "Return to main repo: cd $REPO_ROOT"
-  exit 1
+  # No main worktree to verify in multi-repo mode
+  echo "✅ Multi-repo mode: Worktrees created per-task in each repo"
+
+  # Verify workspace root
+  if [ ! -d "${WORKSPACE_ROOT}" ]; then
+    echo "❌ Error: Workspace root not found: ${WORKSPACE_ROOT}"
+    exit 1
+  fi
+  echo "✅ Workspace root verified: ${WORKSPACE_ROOT}"
 fi
+```
 
-echo "✅ Orchestrator location verified: Main repo root"
+**Single-repo mode:** Continue with existing pre-condition checks:
 
-# Check 2: Verify main worktree exists
-if [ ! -d .worktrees/{runid}-main ]; then
-  echo "❌ Error: Main worktree not found at .worktrees/{runid}-main"
-  echo "Run /spectacular:spec first to create the workspace."
-  exit 1
+```bash
+if [ "$WORKSPACE_MODE" != "multi-repo" ]; then
+  # Get main repo root
+  REPO_ROOT=$(git rev-parse --show-toplevel)
+  CURRENT=$(pwd)
+
+  # Check 1: Verify orchestrator is in main repo root
+  if [ "$CURRENT" != "$REPO_ROOT" ]; then
+    echo "❌ Error: Orchestrator must run from main repo root"
+    echo "Current: $CURRENT"
+    echo "Expected: $REPO_ROOT"
+    echo ""
+    echo "Return to main repo: cd $REPO_ROOT"
+    exit 1
+  fi
+
+  echo "✅ Orchestrator location verified: Main repo root"
+
+  # Check 2: Verify main worktree exists
+  if [ ! -d .worktrees/{runid}-main ]; then
+    echo "❌ Error: Main worktree not found at .worktrees/{runid}-main"
+    echo "Run /spectacular:spec first to create the workspace."
+    exit 1
+  fi
+
+  # Check 3: Verify main branch exists
+  if ! git rev-parse --verify {runid}-main >/dev/null 2>&1; then
+    echo "❌ Error: Branch {runid}-main does not exist"
+    echo "Spec must be created before executing parallel phase."
+    exit 1
+  fi
+
+  # Check 4: Verify we're on correct base branch for this phase
+  CURRENT_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
+  EXPECTED_BASE="{expected-base-branch}"  # From plan: previous phase's last task, or {runid}-main for Phase 1
+
+  if [ "$CURRENT_BRANCH" != "$EXPECTED_BASE" ]; then
+    echo "❌ Error: Phase {phase-id} starting from unexpected branch"
+    echo "   Current: $CURRENT_BRANCH"
+    echo "   Expected: $EXPECTED_BASE"
+    echo ""
+    echo "Parallel phases must start from the correct base branch."
+    echo "All parallel tasks will stack onto: $CURRENT_BRANCH"
+    echo ""
+    echo "If $CURRENT_BRANCH is wrong, the entire phase will be misplaced in the stack."
+    echo ""
+    echo "To fix:"
+    echo "1. Verify previous phase completed: git log --oneline $EXPECTED_BASE"
+    echo "2. Switch to correct base: cd .worktrees/{runid}-main && git checkout $EXPECTED_BASE"
+    echo "3. Re-run /spectacular:execute"
+    exit 1
+  fi
+
+  echo "✅ Phase {phase-id} starting from correct base: $CURRENT_BRANCH"
+  echo "✅ Pre-conditions verified - safe to create task worktrees"
 fi
-
-# Check 3: Verify main branch exists
-if ! git rev-parse --verify {runid}-main >/dev/null 2>&1; then
-  echo "❌ Error: Branch {runid}-main does not exist"
-  echo "Spec must be created before executing parallel phase."
-  exit 1
-fi
-
-# Check 4: Verify we're on correct base branch for this phase
-CURRENT_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
-EXPECTED_BASE="{expected-base-branch}"  # From plan: previous phase's last task, or {runid}-main for Phase 1
-
-if [ "$CURRENT_BRANCH" != "$EXPECTED_BASE" ]; then
-  echo "❌ Error: Phase {phase-id} starting from unexpected branch"
-  echo "   Current: $CURRENT_BRANCH"
-  echo "   Expected: $EXPECTED_BASE"
-  echo ""
-  echo "Parallel phases must start from the correct base branch."
-  echo "All parallel tasks will stack onto: $CURRENT_BRANCH"
-  echo ""
-  echo "If $CURRENT_BRANCH is wrong, the entire phase will be misplaced in the stack."
-  echo ""
-  echo "To fix:"
-  echo "1. Verify previous phase completed: git log --oneline $EXPECTED_BASE"
-  echo "2. Switch to correct base: cd .worktrees/{runid}-main && git checkout $EXPECTED_BASE"
-  echo "3. Re-run /spectacular:execute"
-  exit 1
-fi
-
-echo "✅ Phase {phase-id} starting from correct base: $CURRENT_BRANCH"
-echo "✅ Pre-conditions verified - safe to create task worktrees"
 ```
 
 **Why mandatory:**
@@ -126,29 +205,68 @@ echo "✅ Pre-conditions verified - safe to create task worktrees"
 
 **Before creating worktrees, check if tasks are already complete:**
 
+**Multi-repo resume check:**
+
 ```bash
-COMPLETED_TASKS=()
-PENDING_TASKS=()
+if [ "$WORKSPACE_MODE" = "multi-repo" ]; then
+  COMPLETED_TASKS=()
+  PENDING_TASKS=()
 
-for TASK_ID in {task-ids}; do
-  # Use pattern matching to find branch (short-name varies)
-  BRANCH_PATTERN="{runid}-task-{phase-id}-${TASK_ID}-"
-  BRANCH_NAME=$(git branch | grep "^  ${BRANCH_PATTERN}" | sed 's/^  //' | head -n1)
+  for TASK_ID in ${TASK_IDS}; do
+    TASK_REPO="${TASK_REPOS[$TASK_ID]}"
+    cd ${WORKSPACE_ROOT}/${TASK_REPO}
 
-  if [ -n "$BRANCH_NAME" ]; then
-    echo "✓ Task ${TASK_ID} already complete: $BRANCH_NAME"
-    COMPLETED_TASKS+=("$TASK_ID")
+    # Use pattern matching to find branch (short-name varies)
+    BRANCH_PATTERN="${RUN_ID}-task-${TASK_ID}-"
+    BRANCH_NAME=$(git branch | grep "^  ${BRANCH_PATTERN}" | sed 's/^  //' | head -n1)
+
+    if [ -n "$BRANCH_NAME" ]; then
+      echo "✓ Task ${TASK_ID} (${TASK_REPO}) already complete: $BRANCH_NAME"
+      COMPLETED_TASKS+=("$TASK_ID")
+    else
+      PENDING_TASKS+=("$TASK_ID")
+    fi
+
+    cd ${WORKSPACE_ROOT}
+  done
+
+  if [ ${#PENDING_TASKS[@]} -eq 0 ]; then
+    echo "✅ All tasks already complete, skipping to stacking"
+    # Jump to Step 6 (Stacking)
   else
-    PENDING_TASKS+=("$TASK_ID")
+    echo "📋 Resuming: ${#COMPLETED_TASKS[@]} complete, ${#PENDING_TASKS[@]} pending"
+    echo "Will execute tasks: ${PENDING_TASKS[*]}"
   fi
-done
+fi
+```
 
-if [ ${#PENDING_TASKS[@]} -eq 0 ]; then
-  echo "✅ All tasks already complete, skipping to stacking"
-  # Jump to Step 6 (Stacking)
-else
-  echo "📋 Resuming: ${#COMPLETED_TASKS[@]} complete, ${#PENDING_TASKS[@]} pending"
-  echo "Will execute tasks: ${PENDING_TASKS[*]}"
+**Single-repo resume check:**
+
+```bash
+if [ "$WORKSPACE_MODE" != "multi-repo" ]; then
+  COMPLETED_TASKS=()
+  PENDING_TASKS=()
+
+  for TASK_ID in {task-ids}; do
+    # Use pattern matching to find branch (short-name varies)
+    BRANCH_PATTERN="{runid}-task-{phase-id}-${TASK_ID}-"
+    BRANCH_NAME=$(git branch | grep "^  ${BRANCH_PATTERN}" | sed 's/^  //' | head -n1)
+
+    if [ -n "$BRANCH_NAME" ]; then
+      echo "✓ Task ${TASK_ID} already complete: $BRANCH_NAME"
+      COMPLETED_TASKS+=("$TASK_ID")
+    else
+      PENDING_TASKS+=("$TASK_ID")
+    fi
+  done
+
+  if [ ${#PENDING_TASKS[@]} -eq 0 ]; then
+    echo "✅ All tasks already complete, skipping to stacking"
+    # Jump to Step 6 (Stacking)
+  else
+    echo "📋 Resuming: ${#COMPLETED_TASKS[@]} complete, ${#PENDING_TASKS[@]} pending"
+    echo "Will execute tasks: ${PENDING_TASKS[*]}"
+  fi
 fi
 ```
 
@@ -162,32 +280,71 @@ fi
 
 **Create isolated worktree for EACH PENDING task (skip completed tasks):**
 
+**Multi-repo worktree creation:**
+
+For each task, create worktree in the task's repo:
+
 ```bash
-# Get base branch from main worktree
-BASE_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
+if [ "$WORKSPACE_MODE" = "multi-repo" ]; then
+  for TASK_ID in "${PENDING_TASKS[@]}"; do
+    # Get task's repo from plan
+    TASK_REPO="${TASK_REPOS[$TASK_ID]}"  # e.g., "backend"
 
-# Create worktrees only for pending tasks (from Step 1.5)
-for TASK_ID in "${PENDING_TASKS[@]}"; do
-  git worktree add ".worktrees/{runid}-task-${TASK_ID}" --detach "$BASE_BRANCH"
-  echo "✅ Created .worktrees/{runid}-task-${TASK_ID} (detached HEAD)"
-done
+    # Get base branch for this repo (each repo may have different base)
+    cd ${WORKSPACE_ROOT}/${TASK_REPO}
+    BASE_BRANCH=$(git branch --show-current)
 
-# Verify all worktrees created
-git worktree list | grep "{runid}-task-"
+    # Create worktree inside task's repo
+    git worktree add ".worktrees/${RUN_ID}-task-${TASK_ID}" --detach "$BASE_BRANCH"
+    echo "✅ Created ${TASK_REPO}/.worktrees/${RUN_ID}-task-${TASK_ID} (detached HEAD)"
+
+    cd ${WORKSPACE_ROOT}
+  done
+
+  # Verify all worktrees created across repos
+  for TASK_ID in "${PENDING_TASKS[@]}"; do
+    TASK_REPO="${TASK_REPOS[$TASK_ID]}"
+    if [ ! -d "${WORKSPACE_ROOT}/${TASK_REPO}/.worktrees/${RUN_ID}-task-${TASK_ID}" ]; then
+      echo "❌ Error: Worktree not found: ${TASK_REPO}/.worktrees/${RUN_ID}-task-${TASK_ID}"
+      exit 1
+    fi
+  done
+  echo "✅ Created ${#PENDING_TASKS[@]} worktrees across repos for parallel execution"
+fi
 ```
 
-**Verify creation succeeded:**
+**Parallel tasks across repos:**
+Tasks in DIFFERENT repos can truly execute simultaneously:
+- Task 2.1 (backend) creates `.worktrees/` in backend/
+- Task 2.2 (frontend) creates `.worktrees/` in frontend/
+- No git conflicts - completely independent repos
+
+**Single-repo worktree creation:**
 
 ```bash
-CREATED_COUNT=$(git worktree list | grep -c "{runid}-task-")
-EXPECTED_COUNT=${#PENDING_TASKS[@]}
+if [ "$WORKSPACE_MODE" != "multi-repo" ]; then
+  # Get base branch from main worktree
+  BASE_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
 
-if [ $CREATED_COUNT -ne $EXPECTED_COUNT ]; then
-  echo "❌ Error: Expected $EXPECTED_COUNT worktrees, found $CREATED_COUNT"
-  exit 1
+  # Create worktrees only for pending tasks (from Step 1.5)
+  for TASK_ID in "${PENDING_TASKS[@]}"; do
+    git worktree add ".worktrees/{runid}-task-${TASK_ID}" --detach "$BASE_BRANCH"
+    echo "✅ Created .worktrees/{runid}-task-${TASK_ID} (detached HEAD)"
+  done
+
+  # Verify all worktrees created
+  git worktree list | grep "{runid}-task-"
+
+  CREATED_COUNT=$(git worktree list | grep -c "{runid}-task-")
+  EXPECTED_COUNT=${#PENDING_TASKS[@]}
+
+  if [ $CREATED_COUNT -ne $EXPECTED_COUNT ]; then
+    echo "❌ Error: Expected $EXPECTED_COUNT worktrees, found $CREATED_COUNT"
+    exit 1
+  fi
+
+  echo "✅ Created $CREATED_COUNT worktrees for parallel execution"
 fi
-
-echo "✅ Created $CREATED_COUNT worktrees for parallel execution"
 ```
 
 **Why --detach:** Git doesn't allow same branch in multiple worktrees. Detached HEAD enables parallel worktrees.
@@ -200,17 +357,48 @@ echo "✅ Created $CREATED_COUNT worktrees for parallel execution"
 
 **Each PENDING worktree needs its own dependencies (skip completed tasks):**
 
+**Multi-repo dependency installation:**
+
 ```bash
-for TASK_ID in "${PENDING_TASKS[@]}"; do
-  if [ ! -d .worktrees/{runid}-task-${TASK_ID}/node_modules ]; then
-    bash -c "cd .worktrees/{runid}-task-${TASK_ID} && {install-command} && {postinstall-command}"
-  fi
-done
+if [ "$WORKSPACE_MODE" = "multi-repo" ]; then
+  for TASK_ID in "${PENDING_TASKS[@]}"; do
+    TASK_REPO="${TASK_REPOS[$TASK_ID]}"
+    WORKTREE_PATH="${WORKSPACE_ROOT}/${TASK_REPO}/.worktrees/${RUN_ID}-task-${TASK_ID}"
+
+    # Read setup commands from task's repo CLAUDE.md
+    REPO_CLAUDE_MD="${WORKSPACE_ROOT}/${TASK_REPO}/CLAUDE.md"
+    INSTALL_CMD=$(grep -A1 "**install**:" ${REPO_CLAUDE_MD} | tail -1 | sed 's/^- //')
+    POSTINSTALL_CMD=$(grep -A1 "**postinstall**:" ${REPO_CLAUDE_MD} | tail -1 | sed 's/^- //')
+
+    # Check for dependency marker (varies by ecosystem)
+    if [ ! -d ${WORKTREE_PATH}/node_modules ] && [ ! -d ${WORKTREE_PATH}/venv ] && [ ! -d ${WORKTREE_PATH}/vendor ]; then
+      echo "📦 Installing dependencies in ${TASK_REPO} worktree for Task ${TASK_ID}..."
+      bash -c "cd ${WORKTREE_PATH} && ${INSTALL_CMD}"
+      if [ -n "${POSTINSTALL_CMD}" ]; then
+        bash -c "cd ${WORKTREE_PATH} && ${POSTINSTALL_CMD}"
+      fi
+    fi
+  done
+fi
+```
+
+**Single-repo dependency installation:**
+
+```bash
+if [ "$WORKSPACE_MODE" != "multi-repo" ]; then
+  for TASK_ID in "${PENDING_TASKS[@]}"; do
+    if [ ! -d .worktrees/{runid}-task-${TASK_ID}/node_modules ]; then
+      bash -c "cd .worktrees/{runid}-task-${TASK_ID} && {install-command} && {postinstall-command}"
+    fi
+  done
+fi
 ```
 
 **Why per-worktree:** Isolated worktrees can't share node_modules.
 
 **Why bash -c:** Orchestrator stays in main repo. Subshell navigates to worktree and exits after commands complete.
+
+**Why per-repo CLAUDE.md:** In multi-repo mode, each repo may have different package managers, languages, or setup requirements. The frontend repo might use `pnpm install` while the backend uses `pip install -r requirements.txt`.
 
 **Red flag:** "Share node_modules for efficiency" - Breaks isolation and causes race conditions.
 
@@ -245,13 +433,32 @@ If implementing work beyond this phase's tasks, STOP and report scope violation.
 
 **Only dispatch for PENDING tasks** (from Step 1.5). Completed tasks already have branches and should not be re-executed.
 
+**Multi-repo subagent context:**
+
+When dispatching subagents in multi-repo mode, include per-task repo context:
+
+```
+WORKSPACE_MODE: multi-repo
+WORKSPACE_ROOT: /home/user/workspace
+TASK_REPO: backend
+WORKTREE_PATH: backend/.worktrees/${RUN_ID}-task-2-1
+CONSTITUTION: @backend/docs/constitutions/current/
+SETUP_COMMANDS: (from backend/CLAUDE.md)
+```
+
+The subagent works entirely within its repo's worktree.
+
 For each pending task, spawn subagent with embedded instructions (dispatch ALL in single message):
 ```
 Task(Implement Task {task-id}: {task-name})
 
 ROLE: Implement Task {task-id} in isolated worktree (parallel phase)
 
-WORKTREE: .worktrees/{run-id}-task-{task-id}
+WORKSPACE MODE: {workspace-mode}  # "multi-repo" or "single-repo"
+WORKSPACE ROOT: {workspace-root}  # Only in multi-repo mode
+TASK REPO: {task-repo}            # Only in multi-repo mode (e.g., "backend")
+WORKTREE: {worktree-path}         # Multi-repo: {task-repo}/.worktrees/{run-id}-task-{task-id}
+                                  # Single-repo: .worktrees/{run-id}-task-{task-id}
 
 TASK: {task-name}
 FILES: {files-list}
@@ -281,16 +488,22 @@ If tempted to create ANY file from later phases, STOP.
 
 CONTEXT REFERENCES:
 - Spec: specs/{run-id}-{feature-slug}/spec.md
-- Constitution: docs/constitutions/current/
+- Constitution (multi-repo): {task-repo}/docs/constitutions/current/
+- Constitution (single-repo): docs/constitutions/current/
 - Plan: specs/{run-id}-{feature-slug}/plan.md
-- Worktree: .worktrees/{run-id}-task-{task-id}
+- Worktree: {worktree-path}
 
 INSTRUCTIONS:
 
 1. Navigate to isolated worktree:
+   # Multi-repo mode:
+   cd {workspace-root}/{task-repo}/.worktrees/{run-id}-task-{task-id}
+   # Single-repo mode:
    cd .worktrees/{run-id}-task-{task-id}
 
-2. Read constitution (if exists): docs/constitutions/current/
+2. Read constitution (if exists):
+   # Multi-repo: {task-repo}/docs/constitutions/current/
+   # Single-repo: docs/constitutions/current/
 
 3. Read feature specification: specs/{run-id}-{feature-slug}/spec.md
 
@@ -314,20 +527,21 @@ INSTRUCTIONS:
 
    **CRITICAL**: Use heredoc to prevent bash parsing errors:
 
+   # Quality commands come from the task's repo CLAUDE.md in multi-repo mode
    bash <<'EOF'
-   npm test
+   {test-command}   # e.g., npm test, pytest, go test
    if [ $? -ne 0 ]; then
      echo "❌ Tests failed"
      exit 1
    fi
 
-   npm run lint
+   {lint-command}   # e.g., npm run lint, ruff check, golangci-lint
    if [ $? -ne 0 ]; then
      echo "❌ Lint failed"
      exit 1
    fi
 
-   npm run build
+   {build-command}  # e.g., npm run build, python -m build, go build
    if [ $? -ne 0 ]; then
      echo "❌ Build failed"
      exit 1
@@ -356,10 +570,11 @@ INSTRUCTIONS:
 8. Report completion
 
 CRITICAL:
-- Work in .worktrees/{run-id}-task-{task-id}, NOT main repo
+- Work in {worktree-path}, NOT main repo or workspace root
 - Do NOT stay on branch - verification skill detaches HEAD
 - Do NOT create additional worktrees
 - Do NOT implement work from later phases (check PHASE BOUNDARIES above)
+- In multi-repo mode, branches are created in task's repo, not workspace root
 ```
 
 **Parallel dispatch:** All pending tasks dispatched in single message (true concurrency).
@@ -374,64 +589,129 @@ CRITICAL:
 
 **Check ALL task branches exist AND have commits (includes both previously completed and newly created):**
 
+**Multi-repo verification:**
+
 ```bash
-COMPLETED_TASKS=()
-FAILED_TASKS=()
+if [ "$WORKSPACE_MODE" = "multi-repo" ]; then
+  COMPLETED_TASKS=()
+  FAILED_TASKS=()
 
-# Get base commit to verify branches have new work
-BASE_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
-BASE_SHA=$(git rev-parse "$BASE_BRANCH")
+  for TASK_ID in ${TASK_IDS}; do
+    TASK_REPO="${TASK_REPOS[$TASK_ID]}"
+    cd ${WORKSPACE_ROOT}/${TASK_REPO}
 
-# Check ALL task IDs, not just pending - need to verify complete set exists
-for TASK_ID in {task-ids}; do
-  # Use pattern matching to find branch (short-name varies)
-  BRANCH_PATTERN="{runid}-task-{phase-id}-${TASK_ID}-"
-  BRANCH_NAME=$(git branch | grep "^  ${BRANCH_PATTERN}" | sed 's/^  //' | head -n1)
+    # Get base branch for this repo
+    BASE_BRANCH=$(git branch --show-current)
+    BASE_SHA=$(git rev-parse "$BASE_BRANCH")
 
-  if [ -z "$BRANCH_NAME" ]; then
-    FAILED_TASKS+=("Task ${TASK_ID}: Branch not found")
-    continue
+    # Use pattern matching to find branch
+    BRANCH_PATTERN="${RUN_ID}-task-${TASK_ID}-"
+    BRANCH_NAME=$(git branch | grep "^  ${BRANCH_PATTERN}" | sed 's/^  //' | head -n1)
+
+    if [ -z "$BRANCH_NAME" ]; then
+      FAILED_TASKS+=("Task ${TASK_ID} (${TASK_REPO}): Branch not found")
+      cd ${WORKSPACE_ROOT}
+      continue
+    fi
+
+    # Verify branch has commits beyond base
+    BRANCH_SHA=$(git rev-parse "$BRANCH_NAME")
+    if [ "$BRANCH_SHA" = "$BASE_SHA" ]; then
+      FAILED_TASKS+=("Task ${TASK_ID} (${TASK_REPO}): Branch '$BRANCH_NAME' has no commits")
+      cd ${WORKSPACE_ROOT}
+      continue
+    fi
+
+    COMPLETED_TASKS+=("Task ${TASK_ID} (${TASK_REPO}): $BRANCH_NAME @ $BRANCH_SHA")
+    cd ${WORKSPACE_ROOT}
+  done
+
+  if [ ${#FAILED_TASKS[@]} -gt 0 ]; then
+    echo "❌ Phase {phase-id} execution failed"
+    echo ""
+    echo "Completed tasks:"
+    for task in "${COMPLETED_TASKS[@]}"; do
+      echo "  ✅ $task"
+    done
+    echo ""
+    echo "Failed tasks:"
+    for task in "${FAILED_TASKS[@]}"; do
+      echo "  ❌ $task"
+    done
+    echo ""
+    echo "To resume:"
+    echo "1. Review subagent output above for failure details"
+    echo "2. Fix failed task(s) in {task-repo}/.worktrees/${RUN_ID}-task-{task-id}"
+    echo "3. Re-run /spectacular:execute to complete phase"
+    exit 1
   fi
 
-  # Verify branch has commits beyond base
-  BRANCH_SHA=$(git rev-parse "$BRANCH_NAME")
-  if [ "$BRANCH_SHA" = "$BASE_SHA" ]; then
-    FAILED_TASKS+=("Task ${TASK_ID}: Branch '$BRANCH_NAME' has no commits (still at base $BASE_SHA)")
-    continue
-  fi
-
-  COMPLETED_TASKS+=("Task ${TASK_ID}: $BRANCH_NAME @ $BRANCH_SHA")
-done
-
-if [ ${#FAILED_TASKS[@]} -gt 0 ]; then
-  echo "❌ Phase {phase-id} execution failed"
-  echo ""
-  echo "Completed tasks:"
-  for task in "${COMPLETED_TASKS[@]}"; do
-    echo "  ✅ $task"
-  done
-  echo ""
-  echo "Failed tasks:"
-  for task in "${FAILED_TASKS[@]}"; do
-    echo "  ❌ $task"
-  done
-  echo ""
-  echo "Common causes:"
-  echo "- Subagent failed to implement task (check output above)"
-  echo "- Quality checks blocked commit (test/lint/build failures)"
-  echo "- git add . found no changes (implementation missing)"
-  echo "- gs branch create failed (check git-spice errors)"
-  echo ""
-  echo "To resume:"
-  echo "1. Review subagent output above for failure details"
-  echo "2. Fix failed task(s) in .worktrees/{runid}-task-{task-id}"
-  echo "3. Run quality checks manually to verify fixes"
-  echo "4. Create branch manually: gs branch create {runid}-task-{phase-id}-{task-id}-{name} -m 'message'"
-  echo "5. Re-run /spectacular:execute to complete phase"
-  exit 1
+  echo "✅ All tasks completed with valid commits across repos"
 fi
+```
 
-echo "✅ All {task-count} tasks completed with valid commits"
+**Single-repo verification:**
+
+```bash
+if [ "$WORKSPACE_MODE" != "multi-repo" ]; then
+  COMPLETED_TASKS=()
+  FAILED_TASKS=()
+
+  # Get base commit to verify branches have new work
+  BASE_BRANCH=$(git -C .worktrees/{runid}-main branch --show-current)
+  BASE_SHA=$(git rev-parse "$BASE_BRANCH")
+
+  # Check ALL task IDs, not just pending - need to verify complete set exists
+  for TASK_ID in {task-ids}; do
+    # Use pattern matching to find branch (short-name varies)
+    BRANCH_PATTERN="{runid}-task-{phase-id}-${TASK_ID}-"
+    BRANCH_NAME=$(git branch | grep "^  ${BRANCH_PATTERN}" | sed 's/^  //' | head -n1)
+
+    if [ -z "$BRANCH_NAME" ]; then
+      FAILED_TASKS+=("Task ${TASK_ID}: Branch not found")
+      continue
+    fi
+
+    # Verify branch has commits beyond base
+    BRANCH_SHA=$(git rev-parse "$BRANCH_NAME")
+    if [ "$BRANCH_SHA" = "$BASE_SHA" ]; then
+      FAILED_TASKS+=("Task ${TASK_ID}: Branch '$BRANCH_NAME' has no commits (still at base $BASE_SHA)")
+      continue
+    fi
+
+    COMPLETED_TASKS+=("Task ${TASK_ID}: $BRANCH_NAME @ $BRANCH_SHA")
+  done
+
+  if [ ${#FAILED_TASKS[@]} -gt 0 ]; then
+    echo "❌ Phase {phase-id} execution failed"
+    echo ""
+    echo "Completed tasks:"
+    for task in "${COMPLETED_TASKS[@]}"; do
+      echo "  ✅ $task"
+    done
+    echo ""
+    echo "Failed tasks:"
+    for task in "${FAILED_TASKS[@]}"; do
+      echo "  ❌ $task"
+    done
+    echo ""
+    echo "Common causes:"
+    echo "- Subagent failed to implement task (check output above)"
+    echo "- Quality checks blocked commit (test/lint/build failures)"
+    echo "- git add . found no changes (implementation missing)"
+    echo "- gs branch create failed (check git-spice errors)"
+    echo ""
+    echo "To resume:"
+    echo "1. Review subagent output above for failure details"
+    echo "2. Fix failed task(s) in .worktrees/{runid}-task-{task-id}"
+    echo "3. Run quality checks manually to verify fixes"
+    echo "4. Create branch manually: gs branch create {runid}-task-{phase-id}-{task-id}-{name} -m 'message'"
+    echo "5. Re-run /spectacular:execute to complete phase"
+    exit 1
+  fi
+
+  echo "✅ All {task-count} tasks completed with valid commits"
+fi
 ```
 
 **Why verify:** Agents can fail. Quality checks can block commits. Verify branches exist before stacking.
@@ -442,101 +722,167 @@ echo "✅ All {task-count} tasks completed with valid commits"
 
 ### Step 6: Stack Branches Linearly (BEFORE Cleanup)
 
-**Use loop-based algorithm for any N (orchestrator stays in main repo):**
+**Multi-repo stacking:**
+
+Each repo has its own stack. After parallel phase:
 
 ```bash
-# Stack branches in main worktree using heredoc (orchestrator doesn't cd)
-bash <<'EOF'
-cd .worktrees/{runid}-main
-
-# Get base branch (what parallel tasks should stack onto)
-BASE_BRANCH=$(git branch --show-current)
-
-# Ensure base branch is tracked before stacking onto it
-# (Sequential phases may have created branches without tracking)
-if ! gs branch track --show "$BASE_BRANCH" >/dev/null 2>&1; then
-  echo "⏺ Base branch not tracked yet, tracking now: $BASE_BRANCH"
-  git checkout "$BASE_BRANCH"
-  gs branch track
-fi
-
-TASK_BRANCHES=( {array-of-branch-names} )
-TASK_COUNT=${#TASK_BRANCHES[@]}
-
-# Handle N=1 edge case
-if [ $TASK_COUNT -eq 1 ]; then
-  git checkout "${TASK_BRANCHES[0]}"
-  gs branch track
-  gs upstack onto "$BASE_BRANCH"  # Explicitly set base for single parallel task
-else
-  # Handle N≥2
-  for i in "${!TASK_BRANCHES[@]}"; do
-    BRANCH="${TASK_BRANCHES[$i]}"
-
-    if [ $i -eq 0 ]; then
-      # First task: track + upstack onto base branch (from previous phase)
-      git checkout "$BRANCH"
-      gs branch track
-      gs upstack onto "$BASE_BRANCH"  # Connect to previous phase's work
-    else
-      # Subsequent: track + upstack onto previous
-      PREV_BRANCH="${TASK_BRANCHES[$((i-1))]}"
-      git checkout "$BRANCH"
-      gs branch track
-      gs upstack onto "$PREV_BRANCH"
-    fi
+if [ "$WORKSPACE_MODE" = "multi-repo" ]; then
+  # Group tasks by repo
+  declare -A REPO_TASKS
+  for TASK_ID in ${TASK_IDS}; do
+    TASK_REPO="${TASK_REPOS[$TASK_ID]}"
+    REPO_TASKS[$TASK_REPO]+="${TASK_ID} "
   done
-fi
 
-# Leave main worktree on last branch for next phase continuity
-# Sequential phases will naturally stack on this branch
+  # Stack branches within each repo
+  for REPO in "${!REPO_TASKS[@]}"; do
+    echo "📋 Stacking branches in ${REPO}..."
+    cd ${WORKSPACE_ROOT}/${REPO}
 
-# Display stack
-echo "📋 Stack after parallel phase:"
-gs log short
-echo ""
+    # Get tasks for this repo
+    TASKS=(${REPO_TASKS[$REPO]})
 
-# Verify stack correctness (catch duplicate commits)
-echo "🔍 Verifying stack integrity..."
-STACK_VALID=1
-declare -A SEEN_COMMITS
+    # Get base branch for this repo
+    BASE_BRANCH=$(git branch --show-current)
 
-for BRANCH in "${TASK_BRANCHES[@]}"; do
-  BRANCH_SHA=$(git rev-parse "$BRANCH")
+    # Ensure base branch is tracked
+    if ! gs branch track --show "$BASE_BRANCH" >/dev/null 2>&1; then
+      echo "⏺ Base branch not tracked yet, tracking now: $BASE_BRANCH"
+      git checkout "$BASE_BRANCH"
+      gs branch track
+    fi
 
-  # Check if this commit SHA was already seen
-  if [ -n "${SEEN_COMMITS[$BRANCH_SHA]}" ]; then
-    echo "❌ ERROR: Stack integrity violation"
-    echo "   Branch '$BRANCH' points to commit $BRANCH_SHA"
-    echo "   But '${SEEN_COMMITS[$BRANCH_SHA]}' already points to that commit"
+    # Stack this repo's task branches
+    for i in "${!TASKS[@]}"; do
+      TASK_ID="${TASKS[$i]}"
+      BRANCH="${RUN_ID}-task-${TASK_ID}"
+
+      if [ $i -eq 0 ]; then
+        git checkout "$BRANCH"
+        gs branch track
+        gs upstack onto "$BASE_BRANCH"
+      else
+        PREV_TASK="${TASKS[$((i-1))]}"
+        PREV_BRANCH="${RUN_ID}-task-${PREV_TASK}"
+        git checkout "$BRANCH"
+        gs branch track
+        gs upstack onto "$PREV_BRANCH"
+      fi
+    done
+
+    echo "✅ ${REPO} stack complete:"
+    gs log short
     echo ""
-    echo "This means one of these branches has no unique commits."
-    echo "Possible causes:"
-    echo "- Subagent failed to commit work"
-    echo "- Quality checks blocked commit"
-    echo "- Branch creation succeeded but commit failed"
-    STACK_VALID=0
-    break
+
+    cd ${WORKSPACE_ROOT}
+  done
+
+  echo "✅ All repo stacks complete"
+fi
+```
+
+Note: Cannot stack across repos (git-spice limitation). Each repo maintains its own linear stack.
+
+**Single-repo stacking:**
+
+Use loop-based algorithm for any N (orchestrator stays in main repo):
+
+```bash
+if [ "$WORKSPACE_MODE" != "multi-repo" ]; then
+  # Stack branches in main worktree using heredoc (orchestrator doesn't cd)
+  bash <<'EOF'
+  cd .worktrees/{runid}-main
+
+  # Get base branch (what parallel tasks should stack onto)
+  BASE_BRANCH=$(git branch --show-current)
+
+  # Ensure base branch is tracked before stacking onto it
+  # (Sequential phases may have created branches without tracking)
+  if ! gs branch track --show "$BASE_BRANCH" >/dev/null 2>&1; then
+    echo "⏺ Base branch not tracked yet, tracking now: $BASE_BRANCH"
+    git checkout "$BASE_BRANCH"
+    gs branch track
   fi
 
-  SEEN_COMMITS[$BRANCH_SHA]="$BRANCH"
-  echo "  ✓ $BRANCH @ $BRANCH_SHA"
-done
+  TASK_BRANCHES=( {array-of-branch-names} )
+  TASK_COUNT=${#TASK_BRANCHES[@]}
 
-if [ $STACK_VALID -eq 0 ]; then
-  echo ""
-  echo "❌ Stack verification FAILED - preserving worktrees for debugging"
-  echo ""
-  echo "To investigate:"
-  echo "1. Check branch commits: git log --oneline $BRANCH"
-  echo "2. Check worktree state: ls -la .worktrees/"
-  echo "3. Review subagent output for failed task"
-  echo "4. Fix manually, then re-run /spectacular:execute"
-  exit 1
-fi
+  # Handle N=1 edge case
+  if [ $TASK_COUNT -eq 1 ]; then
+    git checkout "${TASK_BRANCHES[0]}"
+    gs branch track
+    gs upstack onto "$BASE_BRANCH"  # Explicitly set base for single parallel task
+  else
+    # Handle N≥2
+    for i in "${!TASK_BRANCHES[@]}"; do
+      BRANCH="${TASK_BRANCHES[$i]}"
 
-echo "✅ Stack integrity verified - all branches have unique commits"
+      if [ $i -eq 0 ]; then
+        # First task: track + upstack onto base branch (from previous phase)
+        git checkout "$BRANCH"
+        gs branch track
+        gs upstack onto "$BASE_BRANCH"  # Connect to previous phase's work
+      else
+        # Subsequent: track + upstack onto previous
+        PREV_BRANCH="${TASK_BRANCHES[$((i-1))]}"
+        git checkout "$BRANCH"
+        gs branch track
+        gs upstack onto "$PREV_BRANCH"
+      fi
+    done
+  fi
+
+  # Leave main worktree on last branch for next phase continuity
+  # Sequential phases will naturally stack on this branch
+
+  # Display stack
+  echo "📋 Stack after parallel phase:"
+  gs log short
+  echo ""
+
+  # Verify stack correctness (catch duplicate commits)
+  echo "🔍 Verifying stack integrity..."
+  STACK_VALID=1
+  declare -A SEEN_COMMITS
+
+  for BRANCH in "${TASK_BRANCHES[@]}"; do
+    BRANCH_SHA=$(git rev-parse "$BRANCH")
+
+    # Check if this commit SHA was already seen
+    if [ -n "${SEEN_COMMITS[$BRANCH_SHA]}" ]; then
+      echo "❌ ERROR: Stack integrity violation"
+      echo "   Branch '$BRANCH' points to commit $BRANCH_SHA"
+      echo "   But '${SEEN_COMMITS[$BRANCH_SHA]}' already points to that commit"
+      echo ""
+      echo "This means one of these branches has no unique commits."
+      echo "Possible causes:"
+      echo "- Subagent failed to commit work"
+      echo "- Quality checks blocked commit"
+      echo "- Branch creation succeeded but commit failed"
+      STACK_VALID=0
+      break
+    fi
+
+    SEEN_COMMITS[$BRANCH_SHA]="$BRANCH"
+    echo "  ✓ $BRANCH @ $BRANCH_SHA"
+  done
+
+  if [ $STACK_VALID -eq 0 ]; then
+    echo ""
+    echo "❌ Stack verification FAILED - preserving worktrees for debugging"
+    echo ""
+    echo "To investigate:"
+    echo "1. Check branch commits: git log --oneline $BRANCH"
+    echo "2. Check worktree state: ls -la .worktrees/"
+    echo "3. Review subagent output for failed task"
+    echo "4. Fix manually, then re-run /spectacular:execute"
+    exit 1
+  fi
+
+  echo "✅ Stack integrity verified - all branches have unique commits"
 EOF
+fi
 ```
 
 **Why heredoc:** Orchestrator stays in main repo. Heredoc creates subshell that navigates to worktree and exits.
@@ -551,16 +897,43 @@ EOF
 
 **IMPORTANT**: This step only runs if Step 5 verification passes. If any task fails, Step 5 exits with code 1, aborting the workflow. Failed task worktrees are preserved for debugging.
 
-**Remove task worktrees:**
+**Multi-repo cleanup:**
+
+Remove worktrees from each repo:
 
 ```bash
-for TASK_ID in {task-ids}; do
-  git worktree remove ".worktrees/{runid}-task-${TASK_ID}"
-done
+if [ "$WORKSPACE_MODE" = "multi-repo" ]; then
+  for TASK_ID in ${TASK_IDS}; do
+    TASK_REPO="${TASK_REPOS[$TASK_ID]}"
+    cd ${WORKSPACE_ROOT}/${TASK_REPO}
+    git worktree remove ".worktrees/${RUN_ID}-task-${TASK_ID}" --force
+    echo "✅ Removed ${TASK_REPO}/.worktrees/${RUN_ID}-task-${TASK_ID}"
+    cd ${WORKSPACE_ROOT}
+  done
 
-# Verify cleanup
-git worktree list | grep "{runid}-task-"
-# Should be empty
+  # Verify cleanup across all repos
+  for REPO in ${REPOS_WITH_TASKS}; do
+    REMAINING=$(cd ${WORKSPACE_ROOT}/${REPO} && git worktree list | grep "${RUN_ID}-task-" || true)
+    if [ -n "$REMAINING" ]; then
+      echo "⚠️  Worktrees remain in ${REPO}: $REMAINING"
+    fi
+  done
+  echo "✅ Multi-repo worktree cleanup complete"
+fi
+```
+
+**Single-repo cleanup:**
+
+```bash
+if [ "$WORKSPACE_MODE" != "multi-repo" ]; then
+  for TASK_ID in {task-ids}; do
+    git worktree remove ".worktrees/{runid}-task-${TASK_ID}"
+  done
+
+  # Verify cleanup
+  git worktree list | grep "{runid}-task-"
+  # Should be empty
+fi
 ```
 
 **Why after stacking:** Branches must be stacked and verified before destroying evidence.
