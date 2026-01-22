@@ -1,34 +1,288 @@
 ---
 name: decomposing-tasks
-description: Use when you have a complete feature spec and need to plan implementation - analyzes task dependencies, groups into sequential/parallel phases, validates task quality (no XL tasks, explicit files), and calculates parallelization time savings
+description: Use when you need to create an execution plan from a feature spec - handles worktree context, dispatches subagent for task decomposition, validates quality, analyzes dependencies, groups into phases, and commits the plan
 ---
 
 # Task Decomposition
 
-Analyze a feature specification and decompose it into an execution-ready plan with automatic phase grouping based on file dependencies.
+Create an execution-ready plan from a feature specification with automatic phase grouping based on file dependencies.
 
-**When to use:** After completing a feature spec, before implementation.
+**When to use:** After completing a feature spec with `/spectacular:spec`, to create an implementation plan.
 
 **Announce:** "I'm using the Task Decomposition skill to create an execution plan."
 
-## Overview
+## Input
 
-This skill transforms a feature specification into a structured implementation plan by:
+User will provide: `/spectacular:plan {spec-path}`
 
-1. Extracting tasks from spec
-2. Analyzing file dependencies between tasks
-3. Grouping into phases (sequential or parallel)
-4. Validating task quality
-5. Outputting executable plan.md
+Example: `/spectacular:plan @specs/a1b2c3-magic-link-auth/spec.md`
 
-## PR-Sized Chunks Philosophy
+Where `a1b2c3` is the runId and `magic-link-auth` is the feature slug.
+
+## Full Workflow
+
+### Step 0: Extract Run ID and Feature Slug from Spec
+
+**First action**: Read the spec and extract the RUN_ID from frontmatter and determine the spec directory.
+
+```bash
+# Extract runId from spec frontmatter
+RUN_ID=$(grep "^runId:" {spec-path} | awk '{print $2}')
+echo "RUN_ID: $RUN_ID"
+
+# Extract feature slug from the spec path
+# Path pattern: .../specs/{runId}-{feature-slug}/spec.md
+# Use sed to extract directory name without nested command substitution
+SPEC_PATH="{spec-path}"
+DIR_NAME=$(echo "$SPEC_PATH" | sed 's|^.*specs/||; s|/spec.md$||')
+FEATURE_SLUG=$(echo "$DIR_NAME" | sed "s/^${RUN_ID}-//")
+echo "FEATURE_SLUG: $FEATURE_SLUG"
+```
+
+**CRITICAL**: Execute this entire block as a single multi-line Bash tool call. The comment on the first line is REQUIRED - without it, command substitution `$(...)` causes parse errors.
+
+**If RUN_ID not found:**
+Generate one now (for backwards compatibility with old specs):
+
+```bash
+# Generate timestamp-based hash for unique ID
+TIMESTAMP=$(date +%s)
+RUN_ID=$(echo "{feature-name}-$TIMESTAMP" | shasum -a 256 | head -c 6)
+echo "Generated RUN_ID: $RUN_ID (spec missing runId)"
+```
+
+**CRITICAL**: Execute this entire block as a single multi-line Bash tool call. The comment on the first line is REQUIRED - without it, command substitution `$(...)` causes parse errors.
+
+**Spec Directory Pattern:**
+Specs follow the pattern: `specs/{run-id}-{feature-slug}/spec.md`
+Plans are generated at: `specs/{run-id}-{feature-slug}/plan.md`
+
+**Announce:** "Using RUN_ID: {run-id} for {feature-slug} implementation"
+
+### Step 0.5: Switch to Worktree Context
+
+**Second action**: After extracting RUN_ID, switch to the worktree created by `/spectacular:spec`.
+
+```bash
+# Get absolute repo root to avoid recursive paths
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Check if already in correct worktree (avoid double cd)
+CURRENT_DIR=$(pwd)
+if [[ "$CURRENT_DIR" == "${REPO_ROOT}/.worktrees/${RUN_ID}-main" ]] || [[ "$CURRENT_DIR" == *"/.worktrees/${RUN_ID}-main" ]]; then
+  echo "Already in worktree ${RUN_ID}-main"
+else
+  # Switch to worktree using absolute path
+  cd "${REPO_ROOT}/.worktrees/${RUN_ID}-main"
+fi
+```
+
+**CRITICAL**: Execute this entire block as a single multi-line Bash tool call. The comment on the first line is REQUIRED - without it, command substitution `$(...)` causes parse errors.
+
+**If worktree doesn't exist:**
+Error immediately with clear message:
+
+```markdown
+**Worktree Not Found**
+
+The worktree for RUN_ID {run-id} doesn't exist.
+
+Run `/spectacular:spec {feature}` first to create the workspace.
+
+Expected worktree: .worktrees/{run-id}-main/
+```
+
+**IMPORTANT**: All subsequent operations happen in the worktree context.
+
+- Spec is read from: `.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md`
+- Plan will be written to: `.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md`
+- No fallback to main repo (worktree is required)
+
+### Step 1: Dispatch Subagent for Task Decomposition
+
+**Announce:** "Dispatching subagent to generate execution plan from spec."
+
+**IMPORTANT:** Delegate plan generation to a subagent to avoid context bloat. The subagent will read the spec, analyze tasks, and generate the plan in its isolated context.
+
+Use the Task tool with `general-purpose` subagent type:
+
+```
+ROLE: Plan generation subagent for spectacular workflow
+
+TASK: Generate execution plan from feature specification
+
+SPEC_PATH: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md
+RUN_ID: {run-id}
+FEATURE_SLUG: {feature-slug}
+
+IMPLEMENTATION:
+
+**Announce:** "I'm performing task decomposition to create an execution plan."
+
+Follow the Task Decomposition Process below to analyze the spec and generate a plan.
+
+**The process will:**
+
+1. Read the spec from SPEC_PATH above
+2. Extract or design tasks (handles specs with OR without Implementation Plan section)
+3. Validate task quality (no XL tasks, explicit files, proper chunking)
+4. Analyze file dependencies between tasks
+5. Group tasks into phases (sequential or parallel)
+6. Calculate execution time estimates with parallelization savings
+7. Generate plan.md in the spec directory
+
+**Critical validations:**
+- XL tasks (>8h) -> Must split before planning
+- Missing files -> Must specify exact paths
+- Missing acceptance criteria -> Must add 3-5 criteria
+- Wildcard patterns -> Must be explicit
+- Too many S tasks (>30%) -> Bundle into thematic M/L tasks
+
+**Plan output location:**
+.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
+
+**Plan frontmatter must include:**
+```yaml
+---
+runId: {run-id}
+feature: {feature-slug}
+created: YYYY-MM-DD
+status: ready
+---
+```
+
+**After plan generation:**
+Report back to orchestrator with:
+- Plan location
+- Summary of phases and tasks
+- Parallelization time savings
+- Any validation issues encountered
+
+If validation fails, report issues clearly so user can fix spec and re-run.
+```
+
+**Wait for subagent completion** before proceeding to Step 2.
+
+### Step 2: Review Plan Output
+
+After subagent completes, review the generated plan:
+
+```bash
+cat specs/{run-id}-{feature-slug}/plan.md
+```
+
+Verify:
+
+- Phase strategies make sense (parallel for independent tasks)
+- Dependencies are correct (based on file overlaps)
+- No XL tasks (all split into M or smaller)
+- Time savings calculation looks reasonable
+
+### Step 2.5: Commit Plan to Worktree
+
+After plan generation and review, commit the plan to the `{run-id}-main` branch in the worktree:
+
+```bash
+cd .worktrees/${RUN_ID}-main
+git add specs/
+git commit -m "plan: add ${FEATURE_SLUG} implementation plan [${RUN_ID}]"
+```
+
+This ensures the plan is tracked in the worktree branch and doesn't affect the main repo.
+
+### Step 3: Report to User
+
+**IMPORTANT**: After reporting completion, **STOP HERE**. Do not proceed to execution automatically. The user must review the plan and explicitly run `/spectacular:execute` when ready.
+
+Provide comprehensive summary:
+
+````markdown
+**Execution Plan Generated & Committed**
+
+**RUN_ID**: {run-id}
+**Feature**: {feature-slug}
+**Location**: .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
+**Branch**: {run-id}-main (committed in worktree)
+
+## Plan Summary
+
+**Phases**: {count}
+
+- Sequential: {count} phases ({tasks} tasks)
+- Parallel: {count} phases ({tasks} tasks)
+
+**Tasks**: {total-count}
+
+- L (4-8h): {count}
+- M (2-4h): {count}
+- S (1-2h): {count}
+
+## Time Estimates
+
+**Sequential Execution**: {hours}h
+**With Parallelization**: {hours}h
+**Time Savings**: {hours}h ({percent}% faster)
+
+## Parallelization Opportunities
+
+{For each parallel phase:}
+
+- **Phase {id}**: {task-count} tasks can run simultaneously
+  - Tasks: {task-names}
+  - Time: {sequential}h -> {parallel}h
+  - Savings: {hours}h
+
+## Next Steps (User Actions - DO NOT AUTO-EXECUTE)
+
+**The plan command is complete. The following are suggestions for the user, not instructions to execute automatically.**
+
+### 1. Review the Plan
+
+```bash
+cat .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
+```
+
+Verify task breakdown, dependencies, and estimates are correct.
+
+### 2. Execute the Plan (when ready)
+
+```bash
+/spectacular:execute @.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
+```
+
+This is a separate command. Only run after reviewing the plan.
+
+### 3. Modify Plan (if needed)
+
+```bash
+# Edit the plan file directly
+vim .worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
+
+# Commit changes
+cd .worktrees/{run-id}-main
+git add specs/
+git commit -m "plan: adjust task breakdown [${RUN_ID}]"
+
+# Then execute
+/spectacular:execute @.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/plan.md
+```
+
+````
+
+---
+
+## Task Decomposition Process
+
+This section details how to transform a feature specification into a structured implementation plan. The subagent dispatched in Step 1 follows this process.
+
+### PR-Sized Chunks Philosophy
 
 **Tasks should be PR-sized, thematically coherent units** - not mechanical file-by-file splits.
 
 **Think like a senior engineer:**
 
-- ❌ "Add schema" + "Install dependency" + "Add routes" (3 tiny tasks)
-- ✅ "Database Foundation" (schema + migration + dependencies as one unit)
+- Bad: "Add schema" + "Install dependency" + "Add routes" (3 tiny tasks)
+- Good: "Database Foundation" (schema + migration + dependencies as one unit)
 
 **Task chunking principles:**
 
@@ -51,13 +305,13 @@ This skill transforms a feature specification into a structured implementation p
    - Feature boundaries (Auth, Import, Dashboard)
 
 4. **Stackable** - Dependencies flow cleanly
-   - Database → Logic → API → UI
-   - Foundation → Core → Integration
+   - Database -> Logic -> API -> UI
+   - Foundation -> Core -> Integration
 
 **Good chunking examples:**
 
 ```
-✅ GOOD: PR-sized, thematic chunks
+GOOD: PR-sized, thematic chunks
 - Task 1: Database Foundation (M - 4h)
   - Schema changes + migration + dependency install
   - One coherent "foundation" PR
@@ -83,7 +337,7 @@ Each task is a reviewable PR that adds value
 ```
 
 ```
-❌ BAD: Too granular, mechanical splits
+BAD: Too granular, mechanical splits
 - Task 1: Add schema fields (S - 2h)
 - Task 2: Create migration (S - 1h)
 - Task 3: Install dependency (S - 1h)
@@ -113,15 +367,13 @@ If you're creating S tasks, ask:
 
 **Common bundling patterns:**
 
-- Schema + migration + dependencies → "Database Foundation"
-- Agent + tools + schemas → "Agent System"
-- Service + helper functions → "Service Layer"
-- Actions + API routes → "API Layer"
-- All UI components for a flow → "UI Layer"
+- Schema + migration + dependencies -> "Database Foundation"
+- Agent + tools + schemas -> "Agent System"
+- Service + helper functions -> "Service Layer"
+- Actions + API routes -> "API Layer"
+- All UI components for a flow -> "UI Layer"
 
-## The Process
-
-### Step 1: Read Spec and Extract/Design Tasks
+### Decomposition Step 1: Read Spec and Extract/Design Tasks
 
 Read the spec file and extract tasks. The spec may provide tasks in two ways:
 
@@ -176,25 +428,25 @@ steps: [...]
 }
 ```
 
-### Step 2: Validate Task Quality & Chunking
+### Decomposition Step 2: Validate Task Quality & Chunking
 
 For each task, check for quality issues:
 
 **CRITICAL (must fix):**
 
-- ❌ XL complexity (>8h) → Must split into M/L tasks
-- ❌ No files specified → Must add explicit file paths
-- ❌ No acceptance criteria → Must add 3-5 testable criteria
-- ❌ Wildcard patterns (`src/**/*.ts`) → Must use explicit paths
-- ❌ Too many S tasks (>30% of total) → Bundle into thematic M/L tasks
+- XL complexity (>8h) -> Must split into M/L tasks
+- No files specified -> Must add explicit file paths
+- No acceptance criteria -> Must add 3-5 testable criteria
+- Wildcard patterns (`src/**/*.ts`) -> Must use explicit paths
+- Too many S tasks (>30% of total) -> Bundle into thematic M/L tasks
 
 **HIGH (strongly recommend):**
 
-- ⚠️ Standalone S task that could bundle with related work
-- ⚠️ L complexity (5-8h) → Verify it's a coherent unit, not arbitrary split
-- ⚠️ >10 files → Likely too large, consider splitting by subsystem
-- ⚠️ <50 char description → Add more detail about what subsystem/layer this completes
-- ⚠️ <3 acceptance criteria → Add more specific criteria
+- Standalone S task that could bundle with related work
+- L complexity (5-8h) -> Verify it's a coherent unit, not arbitrary split
+- >10 files -> Likely too large, consider splitting by subsystem
+- <50 char description -> Add more detail about what subsystem/layer this completes
+- <3 acceptance criteria -> Add more specific criteria
 
 **Chunking validation:**
 
@@ -220,7 +472,7 @@ For each task, check for quality issues:
 - Report warnings
 - Offer to continue or fix
 
-### Step 3: Analyze File Dependencies
+### Decomposition Step 3: Analyze File Dependencies
 
 Build dependency graph by analyzing file overlaps:
 
@@ -251,10 +503,10 @@ Analysis:
 **Architectural dependencies:**
 Also add dependencies based on layer order:
 
-- Models → Services → Actions → UI
-- Database → Types → Logic → API → Components
+- Models -> Services -> Actions -> UI
+- Database -> Types -> Logic -> API -> Components
 
-### Step 4: Group into Phases
+### Decomposition Step 4: Group into Phases
 
 Group tasks into phases using dependency graph:
 
@@ -286,7 +538,7 @@ Phase 2: [Task 3] - sequential (waits for Phase 1)
 Phase 3: [Task 4] - sequential (waits for Phase 2)
 ```
 
-### Step 5: Calculate Execution Estimates
+### Decomposition Step 5: Calculate Execution Estimates
 
 For each phase, calculate:
 
@@ -307,7 +559,7 @@ Parallel: max(3, 2, 4) = 4h
 Savings: 9 - 4 = 5h (56% faster)
 ```
 
-### Step 6: Generate plan.md
+### Decomposition Step 6: Generate plan.md
 
 Write plan to `{spec-directory}/plan.md`:
 
@@ -387,12 +639,12 @@ pnpm test {test-files}
 
 ````
 
-### Step 7: Report to User
+### Decomposition Step 7: Report to Orchestrator
 
-After generating plan:
+After generating plan, report back to orchestrator with:
 
 ```markdown
-✅ Task Decomposition Complete
+Task Decomposition Complete
 
 **Plan Location**: specs/{run-id}-{feature-slug}/plan.md
 
@@ -409,71 +661,109 @@ After generating plan:
 - Sequential Execution: {hours}h
 - With Parallelization: {hours}h
 - **Time Savings: {hours}h ({percent}% faster)**
-
-## Next Steps
-
-Review plan:
-```bash
-cat specs/{run-id}-{feature-slug}/plan.md
 ````
 
-Execute plan:
-
-```bash
-/spectacular:execute @specs/{run-id}-{feature-slug}/plan.md
-```
-
-```
+---
 
 ## Quality Rules
 
 **Task Sizing (PR-focused):**
-- ⚠️ S (1-2h): Rare - only truly standalone work (e.g., config-only changes)
+- S (1-2h): Rare - only truly standalone work (e.g., config-only changes)
   - Most S tasks should bundle into M
   - Ask: "Would a senior engineer PR this alone?"
-- ✅ M (3-5h): Sweet spot - most tasks should be this size
+- M (3-5h): Sweet spot - most tasks should be this size
   - Complete subsystem, layer, or feature slice
   - Reviewable in one sitting
   - Thematically coherent unit
-- ✅ L (5-7h): Complex coherent units (use for major subsystems)
+- L (5-7h): Complex coherent units (use for major subsystems)
   - Full UI layer with all components
   - Complete API surface (actions + routes)
   - Major feature integration
-- ❌ XL (>8h): NEVER - always split into M/L tasks
+- XL (>8h): NEVER - always split into M/L tasks
 
 **Chunking Standards:**
-- ❌ <30% S tasks is a red flag (too granular)
-- ✅ Most tasks should be M (60-80%)
-- ✅ Some L tasks for major units (10-30%)
-- ✅ Rare S tasks for truly standalone work (<10%)
+- <30% S tasks is a red flag (too granular)
+- Most tasks should be M (60-80%)
+- Some L tasks for major units (10-30%)
+- Rare S tasks for truly standalone work (<10%)
 
 **File Specificity:**
-- ✅ `src/lib/models/auth.ts`
-- ✅ `src/components/auth/LoginForm.tsx`
-- ❌ `src/**/*.ts` (too vague)
-- ❌ `src/lib/models/` (specify exact files)
+- Good: `src/lib/models/auth.ts`
+- Good: `src/components/auth/LoginForm.tsx`
+- Bad: `src/**/*.ts` (too vague)
+- Bad: `src/lib/models/` (specify exact files)
 
 **Acceptance Criteria:**
-- ✅ 3-5 specific, testable criteria
-- ✅ Quantifiable (tests pass, build succeeds, API returns 200)
-- ❌ Vague ("works well", "is good")
-- ❌ Too many (>7 - task is too large)
+- 3-5 specific, testable criteria
+- Quantifiable (tests pass, build succeeds, API returns 200)
+- Not vague ("works well", "is good")
+- Not too many (>7 - task is too large)
 
 **Dependencies:**
-- ✅ Minimal (only true blockers)
-- ✅ Explicit reasons (shares file X)
-- ❌ Circular dependencies
-- ❌ Over-constrained (everything depends on everything)
+- Minimal (only true blockers)
+- Explicit reasons (shares file X)
+- No circular dependencies
+- Not over-constrained (everything depends on everything)
 
 ## Error Handling
 
-### Spec Has Insufficient Information
+### Missing Worktree
 
-If spec has neither "Implementation Plan" nor enough detail to design tasks:
+If the worktree doesn't exist when trying to switch context:
 
+```markdown
+**Worktree Not Found**
+
+The worktree for RUN_ID {run-id} doesn't exist at .worktrees/{run-id}-main/
+
+This means `/spectacular:spec` hasn't been run yet for this feature.
+
+## Resolution
+
+1. Run `/spectacular:spec {feature-description}` first to create the worktree
+2. Then run `/spectacular:plan @.worktrees/{run-id}-main/specs/{run-id}-{feature-slug}/spec.md`
+
+Or if you have an existing spec in the main repo, it needs to be migrated to a worktree first.
 ```
 
-❌ Cannot decompose - spec lacks implementation details
+### Validation Failures
+
+If the skill finds quality issues:
+
+```markdown
+**Plan Generation Failed - Spec Quality Issues**
+
+The spec has issues that prevent task decomposition:
+
+**CRITICAL Issues** (must fix):
+- Task 3: XL complexity (12h estimated) - split into M/L tasks
+- Task 5: No files specified - add explicit file paths
+- Task 7: No acceptance criteria - add 3-5 testable criteria
+- Too many S tasks (5 of 8 = 63%) - bundle into thematic M/L tasks
+
+**HIGH Issues** (strongly recommend):
+- Task 2 (S - 1h): "Add routes" - bundle with UI components task
+- Task 4 (S - 2h): "Create schemas" - bundle with agent or service task
+- Task 6: Wildcard pattern `src/**/*.ts` - specify exact files
+
+## Fix These Issues
+
+1. Edit the spec at {spec-path}
+2. Address all CRITICAL issues (required)
+3. Consider fixing HIGH issues (recommended)
+4. Bundle S tasks into thematic M/L tasks for better PR structure
+5. Re-run: `/spectacular:plan @{spec-path}`
+```
+
+### No Tasks Found
+
+If spec has no "Implementation Plan" section and insufficient detail:
+
+```markdown
+**Cannot Generate Plan - No Tasks Found**
+
+The spec at {spec-path} doesn't have an "Implementation Plan" section with tasks,
+and lacks sufficient detail to design tasks automatically.
 
 The spec must have either:
 - An "Implementation Plan" section with tasks, OR
@@ -484,51 +774,43 @@ Current spec has:
 - Architecture section: [YES/NO]
 - Files to create/modify: [YES/NO]
 
-Add more implementation details to the spec, then re-run:
-/spectacular:plan @specs/{run-id}-{feature-slug}/spec.md
+Use `/spectacular:spec` to generate a complete spec with task breakdown first:
 
+```bash
+/spectacular:spec "your feature description"
 ```
 
-### Critical Quality Issues
-
-If tasks have critical issues:
-
-```
-
-❌ Task Quality Issues - Cannot Generate Plan
-
-Critical Issues Found:
-
-- Task 3: XL complexity (12h) - must split
-- Task 5: No files specified
-- Task 7: No acceptance criteria
-
-Fix these issues in the spec, then re-run:
-/spectacular:plan @specs/{run-id}-{feature-slug}/spec.md
-
+Then run `/spectacular:plan` on the generated spec.
 ```
 
 ### Circular Dependencies
 
-If dependency graph has cycles:
+If tasks have circular dependencies:
 
+```markdown
+**Circular Dependencies Detected**
+
+The task dependency graph has cycles:
+- Task A depends on Task B
+- Task B depends on Task C
+- Task C depends on Task A
+
+This makes execution impossible.
+
+## Resolution
+
+Review the task file dependencies in the spec:
+1. Check which files each task modifies
+2. Ensure dependencies flow in one direction
+3. Consider splitting tasks to break cycles
+4. Re-run `/spectacular:plan` after fixing
 ```
-
-❌ Circular Dependencies Detected
-
-Task A depends on Task B
-Task B depends on Task C
-Task C depends on Task A
-
-This is impossible to execute. Review task organization.
-
-````
 
 ## Integration with Other Skills
 
 **Before:** Use `brainstorming` and `spec-feature` to create complete spec
 
-**After:** Use `/execute` command to run plan with `subagent-driven-development`
+**After:** Use `/spectacular:execute` command to run plan with `subagent-driven-development`
 
 **Pairs with:**
 - `subagent-driven-development` - Executes individual tasks
@@ -549,4 +831,11 @@ Every task must include:
 ```bash
 pnpm biome check --write .
 pnpm test
-````
+```
+
+## Important Notes
+
+- **Automatic strategy selection** - Skill analyzes dependencies and chooses sequential vs parallel
+- **File-based dependencies** - Tasks sharing files must run sequentially
+- **Quality gates** - Validates before generating (prevents bad plans)
+- **Architecture adherence** - All tasks must follow project constitution at @docs/constitutions/current/
