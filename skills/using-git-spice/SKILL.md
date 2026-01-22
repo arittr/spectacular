@@ -54,6 +54,8 @@ When on `feature-b`:
 
 ## Common Workflows
 
+These workflows apply to **single-repository** scenarios. For features spanning multiple repositories, see [Multi-Repo Workflows](#multi-repo-workflows) below.
+
 ### Workflow 1: Create and Submit Stack
 
 ```bash
@@ -188,6 +190,84 @@ If `gs upstack restack` or `gs repo restack` encounters conflicts:
 4. After resolution, run `gs upstack submit` to push changes
 
 If you need to abort a restack, check `gs --help` for recovery options.
+
+## Multi-Repo Workflows
+
+### Per-Repo Stacking Limitation
+
+Git-spice operates on ONE repository at a time. In multi-repo spectacular features:
+- Each repo has its own independent stack
+- Cannot create a cross-repo linear stack
+- Branches stay within their respective repos
+
+### Multi-Repo PR Submission
+
+For features spanning multiple repos, submit PRs in phase order:
+
+**Phase-ordered submission:**
+```bash
+# Phase 1 repos first (foundation)
+cd shared-lib
+gs stack submit
+cd ..
+
+# Phase 2 repos second
+cd backend
+gs stack submit
+cd ..
+
+# Phase 3 repos last (depends on earlier phases)
+cd frontend
+gs stack submit
+cd ..
+```
+
+**Why phase order matters:**
+- Phase 1 changes (e.g., shared types) must merge before Phase 2 consumers
+- Prevents broken builds from missing dependencies
+- Mirrors the execution order during development
+
+### Multi-Repo Stack Visualization
+
+View stacks across all repos:
+
+```bash
+# From workspace root
+for repo in backend frontend shared-lib; do
+  echo "=== $repo ==="
+  cd $repo && gs log short && cd ..
+done
+```
+
+### Multi-Repo Sync
+
+After PRs merge, sync all repos:
+
+```bash
+# From workspace root
+for repo in backend frontend shared-lib; do
+  echo "Syncing $repo..."
+  cd $repo && gs repo sync && cd ..
+done
+```
+
+### Coordinating Cross-Repo Dependencies
+
+If PR in repo A depends on PR in repo B:
+
+1. Merge repo B's PR first
+2. Update repo A to use the merged changes
+3. Then merge repo A's PR
+
+**Example:**
+```
+shared-lib: PR for new types
+  ↓ (merge first)
+backend: PR using new types
+  ↓ (merge second)
+frontend: PR using backend API
+  ↓ (merge third)
+```
 
 ## Additional Resources
 

@@ -196,9 +196,9 @@ else
 fi
 ```
 
-### Step 6: Multi-Repo Detection
+### Step 6: Multi-Repo Detection and Validation
 
-Detect whether the workspace is single-repo or multi-repo:
+Detect whether the workspace is single-repo or multi-repo, and validate per-repo requirements:
 
 ```bash
 echo ""
@@ -211,15 +211,54 @@ if [ "$REPO_COUNT" -gt 1 ]; then
   echo "Multi-repo workspace detected ($REPO_COUNT repos)"
   WORKSPACE_MODE="multi-repo"
 
-  # List detected repos
-  echo "   Detected repositories:"
-  find . -maxdepth 2 -name ".git" -type d 2>/dev/null | while read gitdir; do
-    repo_path=$(dirname "$gitdir")
-    echo "   - $repo_path"
+  # List and validate each repo
+  REPOS=$(find . -maxdepth 2 -name ".git" -type d | xargs -I{} dirname {} | sed 's|^\./||' | sort)
+
+  for REPO in $REPOS; do
+    echo ""
+    echo "Checking repo: $REPO"
+
+    # Check for CLAUDE.md with setup commands
+    if [ -f "$REPO/CLAUDE.md" ]; then
+      if grep -q "**install**:" "$REPO/CLAUDE.md"; then
+        echo "  CLAUDE.md with setup commands found"
+      else
+        echo "  Warning: CLAUDE.md exists but missing setup commands"
+        echo "    Add '**install**: \`your-install-command\`' to $REPO/CLAUDE.md"
+      fi
+    else
+      echo "  Warning: No CLAUDE.md found in $REPO"
+      echo "    Create $REPO/CLAUDE.md with setup commands for worktree support"
+    fi
+
+    # Check for constitution (optional)
+    if [ -d "$REPO/docs/constitutions/current" ]; then
+      echo "  Constitution found"
+    else
+      echo "  Note: No constitution at docs/constitutions/current/"
+    fi
   done
+
 else
   echo "Single-repo mode"
   WORKSPACE_MODE="single-repo"
+fi
+```
+
+**Create workspace-level specs directory (multi-repo only):**
+
+```bash
+if [ "$WORKSPACE_MODE" = "multi-repo" ]; then
+  echo ""
+  if [ ! -d "specs" ]; then
+    echo "Creating specs/ directory at workspace root"
+    mkdir -p specs
+    echo "   Created specs/ for cross-repo specifications"
+  else
+    echo "specs/ directory exists at workspace root"
+    SPEC_COUNT=$(find specs -name "spec.md" 2>/dev/null | wc -l | tr -d ' ')
+    echo "   Found $SPEC_COUNT specification(s)"
+  fi
 fi
 ```
 
@@ -285,6 +324,41 @@ fi
 echo "========================================="
 ```
 
+**Multi-repo summary addition:**
+
+If `WORKSPACE_MODE="multi-repo"`, append additional details:
+
+```bash
+if [ "$WORKSPACE_MODE" = "multi-repo" ]; then
+  echo ""
+  echo "========================================="
+  echo "Multi-Repo Workspace Summary"
+  echo "========================================="
+  echo ""
+  echo "Workspace root: $(pwd)"
+  echo "Repos detected: $REPO_COUNT"
+  echo ""
+  echo "Per-repo status:"
+  for REPO in $REPOS; do
+    CLAUDE_STATUS="missing"
+    CONST_STATUS="missing"
+    [ -f "$REPO/CLAUDE.md" ] && CLAUDE_STATUS="present"
+    [ -d "$REPO/docs/constitutions/current" ] && CONST_STATUS="present"
+    echo "  $REPO: CLAUDE.md=$CLAUDE_STATUS, constitution=$CONST_STATUS"
+  done
+  echo ""
+  echo "Specs location: ./specs/ (workspace root)"
+  echo ""
+  echo "Next steps for multi-repo:"
+  echo "  1. Ensure each repo has CLAUDE.md with setup commands"
+  echo "  2. Generate a spec: /spectacular:spec \"your feature\""
+  echo "  3. Spec will be saved to ./specs/{runId}-{feature}/"
+  echo "  4. Use @repo:path syntax to reference files across repos"
+  echo ""
+  echo "========================================="
+fi
+```
+
 ## Quality Rules
 
 1. **All checks must complete** - Do not skip any validation step
@@ -336,7 +410,29 @@ If .worktrees/ exists with content:
 ### Multi-Repo Workspace
 
 If multiple repositories are detected:
-1. Report the workspace mode
-2. List detected repositories
-3. Continue with single-repo validation for the current directory
-4. Note: Full multi-repo support is planned for future versions
+1. Report the workspace mode and repo count
+2. Validate each repo for required configuration:
+   - Check for CLAUDE.md file
+   - Check if CLAUDE.md has setup commands (`**install**:`)
+   - Check for constitution at `docs/constitutions/current/`
+3. Create workspace-level specs/ directory if missing
+4. Generate per-repo status summary showing:
+   - CLAUDE.md presence (required for worktree support)
+   - Constitution presence (optional, shows warning if missing)
+5. Provide clear next steps for multi-repo workflows
+
+### Missing CLAUDE.md in Repo
+
+If a repo lacks CLAUDE.md:
+1. Report as a warning (not a blocker)
+2. Explain why it's needed (worktree setup requires install commands)
+3. Provide guidance on what to add
+4. Continue checking other repos
+
+### Missing Setup Commands
+
+If CLAUDE.md exists but lacks setup commands:
+1. Report as a warning
+2. Explain the required format (`**install**: \`command\``)
+3. Note that worktrees won't work properly without setup commands
+4. Continue validation
