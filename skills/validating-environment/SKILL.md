@@ -23,13 +23,24 @@ Use this skill when:
 
 ### Step 1: Check Superpowers Plugin
 
-Check if superpowers is installed:
+Check if superpowers is installed (handles both direct and marketplace installs):
 
 ```bash
+# Check both possible install locations:
+# - Direct: ~/.claude/plugins/cache/superpowers
+# - Marketplace: ~/.claude/plugins/cache/superpowers-marketplace/superpowers
+SUPERPOWERS_PATH=""
 if [ -d ~/.claude/plugins/cache/superpowers ]; then
+  SUPERPOWERS_PATH=~/.claude/plugins/cache/superpowers
+elif [ -d ~/.claude/plugins/cache/superpowers-marketplace/superpowers ]; then
+  SUPERPOWERS_PATH=~/.claude/plugins/cache/superpowers-marketplace/superpowers
+fi
+
+if [ -n "$SUPERPOWERS_PATH" ]; then
   echo "Superpowers plugin is installed"
-  SUPERPOWERS_VERSION=$(cd ~/.claude/plugins/cache/superpowers && git describe --tags 2>/dev/null || echo "unknown")
+  SUPERPOWERS_VERSION=$(cd "$SUPERPOWERS_PATH" && git describe --tags 2>/dev/null || echo "unknown")
   echo "   Version: $SUPERPOWERS_VERSION"
+  echo "   Path: $SUPERPOWERS_PATH"
 else
   echo "Superpowers plugin NOT installed"
   echo ""
